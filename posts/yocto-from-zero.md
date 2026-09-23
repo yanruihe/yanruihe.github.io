@@ -2,7 +2,7 @@
 
 本篇使用 Yocto Project 6.0.2（Wrynose）在 `qemux86-64` 上从源码构建并启动一个完整镜像，再把一个 systemd 服务放进镜像。先在 QEMU 验证内核、根文件系统、init 和应用，再迁移到真实开发板；QEMU 成功不等于板级 BSP、Bootloader、设备树和外设已经适配。
 
-## 先建立心智模型：Yocto 由什么组成？
+## Yocto 的构建组成：Poky、层、配方与 BitBake
 
 Yocto Project 不是一个可以直接安装到目标机上的 Linux 发行版，而是一组用于构建嵌入式 Linux 的项目和规范。Poky 是参考发行版与集成层，OpenEmbedded Core 提供基础配方和类，BitBake 读取这些元数据并安排任务。一个产品构建通常还会加入板级 BSP layer、产品 distro layer、应用 layer 和镜像配方。
 

@@ -2,7 +2,7 @@
 
 This article builds and boots a complete `qemux86-64` image from Yocto Project 6.0.2 (Wrynose), then adds a systemd service. QEMU validates the kernel, root filesystem, init, and application path; it does not replace the BSP, bootloader, device tree, and peripheral work needed for a real board.
 
-## First, build a mental model: what makes up Yocto?
+## Yocto build components: Poky, layers, recipes, and BitBake
 
 The Yocto Project is not a Linux distribution that you install on the target. It is a set of projects and conventions for building embedded Linux. Poky is the reference distribution and integration layer; OpenEmbedded-Core supplies the core recipes and classes; BitBake reads the metadata and schedules tasks. A product build usually adds a board BSP layer, a product distribution layer, application layers, and an image recipe.
 

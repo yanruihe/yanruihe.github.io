@@ -6,8 +6,8 @@
   <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
     <div class="article-title"><span class="title-hover-animation">从零构建嵌入式 Linux：Yocto</span></div><div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Yocto</span></div><div class="kb-meta">2026-09-23 · Yocto Project 6.0.2 · QEMU x86_64</div></div></div>
     <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>从 6.0.2 源码构建、启动完整的 <code>qemux86-64</code> 镜像，再把 systemd 服务纳入镜像。QEMU 验证内核、根文件系统、init 与应用流程；真实开发板仍需 BSP、Bootloader、设备树和外设适配。</p><p><a href="#model">心智模型</a> · <a href="#host">主机准备</a> · <a href="#sources">获取源码</a> · <a href="#base-image">最小镜像</a> · <a href="#service">服务镜像</a> · <a href="#debug">任务与排错</a> · <a href="#team">团队交付</a></p></div>
-      <div class="kb-section"><h2 id="model">先建立心智模型：Yocto 由什么组成？</h2><p>Yocto Project 不是安装到目标机上的 Linux 发行版，而是一组构建嵌入式 Linux 的项目和规范。Poky 是参考发行版与集成层；OpenEmbedded-Core 提供基础配方和类；BitBake 读取元数据并安排任务。产品构建通常还会加入板级 BSP layer、产品 distro layer、应用 layer 和 image recipe。</p><pre class="kb-code"><code>MACHINE（硬件） + DISTRO（发行版策略） + IMAGE recipe（产品内容）
+      <div class="kb-lead"><p>从 6.0.2 源码构建、启动完整的 <code>qemux86-64</code> 镜像，再把 systemd 服务纳入镜像。QEMU 验证内核、根文件系统、init 与应用流程；真实开发板仍需 BSP、Bootloader、设备树和外设适配。</p><p><a href="#components">构建组成</a> · <a href="#host">主机准备</a> · <a href="#sources">获取源码</a> · <a href="#base-image">最小镜像</a> · <a href="#service">服务镜像</a> · <a href="#debug">任务与排错</a> · <a href="#team">团队交付</a></p></div>
+      <div class="kb-section"><h2 id="components">Yocto 的构建组成：Poky、层、配方与 BitBake</h2><p>Yocto Project 不是安装到目标机上的 Linux 发行版，而是一组构建嵌入式 Linux 的项目和规范。Poky 是参考发行版与集成层；OpenEmbedded-Core 提供基础配方和类；BitBake 读取元数据并安排任务。产品构建通常还会加入板级 BSP layer、产品 distro layer、应用 layer 和 image recipe。</p><pre class="kb-code"><code>MACHINE（硬件） + DISTRO（发行版策略） + IMAGE recipe（产品内容）
                          ↓
               layers 中的 .conf / .bb / .bbappend
                          ↓ BitBake 解析依赖与任务
