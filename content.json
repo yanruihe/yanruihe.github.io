@@ -9,10 +9,7 @@
     {"title": "Git Knowledge Base", "date": "2026-09-23T00:00:00Z", "updated": "2026-09-23T00:00:00Z", "comments": false, "path": "knowledge-base/en/git/index.html", "permalink": "https://yanruihe.github.io/knowledge-base/en/git/", "excerpt": "Git branches, commits, synchronization, and recovery", "text": "Git branch commit rebase revert reflog"},
     {"title": "Yocto Knowledge Base", "date": "2026-09-23T00:00:00Z", "updated": "2026-09-23T00:00:00Z", "comments": false, "path": "knowledge-base/en/yocto/index.html", "permalink": "https://yanruihe.github.io/knowledge-base/en/yocto/", "excerpt": "Yocto Project, BitBake, layers, recipes, and devtool", "text": "Yocto BitBake Layer Recipe Image devtool"}
   ],
-  "posts": [
-    {"title": "liunx使用心得", "slug": "liunx使用心得", "date": "2022-11-07T11:49:05Z", "updated": "2022-11-07T11:49:05.893Z", "comments": true, "path": "2022/11/07/liunx使用心得/", "link": "", "permalink": "https://yanruihe.github.io/2022/11/07/liunx%E4%BD%BF%E7%94%A8%E5%BF%83%E5%BE%97/", "excerpt": "", "text": "", "categories": [], "tags": []},
-    {"title": "Hello World", "slug": "hello-world", "date": "2022-11-07T11:42:28.174Z", "updated": "2022-11-07T11:41:12.913Z", "comments": true, "path": "2022/11/07/hello-world/", "link": "", "permalink": "https://yanruihe.github.io/2022/11/07/hello-world/", "excerpt": "", "text": "Welcome to Hexo! Quick Start", "categories": [], "tags": []}
-  ],
+  "posts": [],
   "categories": [],
   "tags": []
 }

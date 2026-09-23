@@ -30,14 +30,4 @@
     <url>/knowledge-base/en/yocto/</url>
     <content><![CDATA[Yocto Project, BitBake, layers, recipes, machines, images, devtool, build debugging, reproducibility, and release.]]></content>
   </entry>
-  <entry>
-    <title>Hello World</title>
-    <url>/2022/11/07/hello-world/</url>
-    <content><![CDATA[Welcome to Hexo! Quick Start.]]></content>
-  </entry>
-  <entry>
-    <title>liunx使用心得</title>
-    <url>/2022/11/07/liunx%E4%BD%BF%E7%94%A8%E5%BF%83%E5%BE%97/</url>
-    <content><![CDATA[]]></content>
-  </entry>
 </search>

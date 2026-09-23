@@ -5,7 +5,6 @@
     'Yocto 使用知识库': 'Yocto Knowledge Base',
     'Git 知识库': 'Git Knowledge Base',
     '知识库总览': 'Knowledge Base Overview',
-    'liunx使用心得': 'Linux Notes',
     '黄色的森林分出两条路': 'Two roads diverged in a yellow wood',
     '我选择人迹更少的那一条，从此决定我一生的道路。': 'I took the one less traveled by, and that has made all the difference.',
     '阅读全文': 'Read more',
@@ -34,6 +33,8 @@
     'Git 工作流、分支、提交和恢复': 'Git workflows, branches, commits, and recovery',
     'Yocto 构建、Layer、Recipe 和 devtool': 'Yocto builds, layers, recipes, and devtool',
     '进入知识库': 'Open Knowledge Base',
+    '暂无文章': 'No posts yet',
+    '查阅知识库': 'Browse the knowledge base',
     '知识库页面': 'Knowledge Base Page',
     '驱动': 'powered by',
     '主题': 'Theme',
@@ -90,8 +91,7 @@
     } else {
       title = title.replace('Yocto Knowledge Base', 'Yocto 使用知识库')
         .replace('Git Knowledge Base', 'Git 知识库')
-        .replace('Knowledge Base', '知识库')
-        .replace('Linux Notes', 'liunx使用心得');
+        .replace('Knowledge Base', '知识库');
     }
     document.title = title;
   }
