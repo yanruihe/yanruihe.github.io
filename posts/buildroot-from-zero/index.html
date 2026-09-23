@@ -12,53 +12,506 @@
     <div class="article-title"><span class="title-hover-animation">从零构建嵌入式 Linux：Buildroot</span></div>
     <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Buildroot</span></div><div class="kb-meta">2026-09-23 · Buildroot 2025.02.18 LTS · QEMU x86_64</div></div></div>
     <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>从源码生成交叉工具链、Linux 内核和根文件系统，在 QEMU 中启动并验证，而不是只编译一个程序。QEMU 的虚拟 BIOS 负责早期引导；真实 ARM 板仍需对应 Bootloader、设备树和 BSP。</p><p><a href="#why">构建原理</a> · <a href="#host">主机准备</a> · <a href="#build">构建</a> · <a href="#boot">启动</a> · <a href="#config">配置迭代</a> · <a href="#troubleshoot">排错</a> · <a href="#product">产品交付</a></p></div>
-      <div class="kb-section"><h2 id="why">先弄清原理：Buildroot 为什么能构建一整套系统？</h2><p>Buildroot <strong>不是用 C 语言重新实现 Linux</strong>。它本身主要由 Makefile、Kconfig 配置、脚本和补丁组成；内核、GCC、C 库、BusyBox 等来自各自独立的上游项目。Buildroot 负责选择版本与选项、处理包之间的依赖、下载源码、交叉编译、安装到目标根文件系统，再生成指定格式的镜像。因此，<code>make</code> 触发的是一条受配置驱动的构建链，而不是编译一个巨大的 C 项目。</p><pre class="kb-code"><code>板级 defconfig → .config → 工具链（binutils / GCC / C 库，或外部工具链）
+      <div class="kb-lead"><p>从源码构建交叉工具链、Linux 内核和根文件系统，在 QEMU 中启动并验证，而不是只编译一个程序。本例用 QEMU 的 <code>-kernel</code> 直接启动内核，验证内核到用户空间；真实开发板的固件与 Bootloader 启动链仍需单独测试。</p><p><a href="#why">构建原理</a> · <a href="#host">主机</a> · <a href="#build">首次构建</a> · <a href="#boot">QEMU 验证</a> · <a href="#architecture">源码树</a> · <a href="#cross-compile">交叉编译</a> · <a href="#boot-chain">启动链</a> · <a href="#external-package">C 程序包实战</a> · <a href="#init-systems">init 与服务</a> · <a href="#incremental-build">增量重建</a> · <a href="#rootfs-formats">rootfs 格式</a> · <a href="#troubleshoot">排错</a> · <a href="#product">产品交付</a> · <a href="#buildroot-vs-yocto">Buildroot vs Yocto</a> · <a href="#references">参考</a></p></div>
+      <div class="kb-section"><h2 id="why">先弄清原理：Buildroot 为什么能构建一整套系统？</h2>
+<p>Buildroot <strong>不是用 C 语言重新实现 Linux</strong>。它本身主要由 Makefile、Kconfig 配置、脚本和补丁组成；内核、GCC、C 库、BusyBox 等来自各自独立的上游项目。Buildroot 负责选择版本与选项、处理包之间的依赖、下载源码、交叉编译、安装到目标根文件系统，再生成指定格式的镜像。因此，<code>make</code> 触发的是一条受配置驱动的构建链，而不是编译一个巨大的 C 项目。</p>
+<pre class="kb-code"><code class="language-text">板级 defconfig → .config → 工具链（binutils / GCC / C 库，或外部工具链）
                           → 目标软件（例如 BusyBox 和自己的应用）
-                          → 内核 / 可选 Bootloader → 根文件系统 → 镜像</code></pre><p>这是一张<strong>职责图</strong>，不是严格的任务执行顺序；具体组件取决于配置。本文的 <code>qemu_x86_64_defconfig</code> 生成内核和根文件系统，QEMU 使用虚拟 BIOS，<strong>没有在这个示例中构建 U-Boot</strong>。C 库也不是固定为 musl，可按配置选择 glibc、musl 或 uClibc-ng 等。BusyBox 提供精简用户空间工具和默认 init；它不是内核，也不是 Buildroot 本身。</p></div>
-      <div class="kb-section"><h2 id="host">1. 准备构建主机</h2><p>在 Linux 主机上以普通用户构建。Windows 可用 Linux 虚拟机或 WSL2 的 Linux 文件系统；不要把大型构建目录放在 Windows 挂载盘。下面以 Ubuntu 24.04 为例，其他发行版参考<a href="https://buildroot.org/downloads/manual/manual.html#requirement-mandatory">官方主机依赖</a>。预留足够磁盘、内存和网络带宽。</p><pre class="kb-code"><code>sudo apt update
+                          → 内核 / 可选 Bootloader → 根文件系统 → 镜像
+</code></pre>
+<p>这是一张<strong>职责图</strong>，不是严格的任务执行顺序；具体组件取决于配置。本文的 <code>qemu_x86_64_defconfig</code> 生成内核和根文件系统，QEMU 用 <code>-kernel</code> 直接启动内核，<strong>没有在这个示例中构建 U-Boot，也没有测试固件寻找内核的阶段</strong>。C 库也不是固定为 musl，可按配置选择 glibc、musl 或 uClibc-ng 等。BusyBox 提供精简用户空间工具和默认 init；它不是内核，也不是 Buildroot 本身。</p></div>
+      <div class="kb-section"><h2 id="host">1. 准备构建主机</h2>
+<p>在 Linux 主机上以普通用户构建；Windows 用户可用 Linux 虚拟机或 WSL2 的 Linux 文件系统，不要把大型构建目录放在 Windows 挂载盘。下面以 Ubuntu 24.04 为例，其他发行版按 <a href="https://buildroot.org/downloads/manual/manual.html#requirement-mandatory">Buildroot 主机依赖</a> 安装等价软件。预留足够磁盘空间、内存和网络带宽；首次下载和编译可能耗时较长。</p>
+<pre class="kb-code"><code class="language-bash">sudo apt update
 sudo apt install -y build-essential git wget cpio unzip rsync file bc \
-  bzip2 gzip xz-utils patch sed gawk qemu-system-x86</code></pre><p>仅安装主机依赖需要 sudo；不要使用 <code>sudo make</code>。</p></div>
-      <div class="kb-section"><h2 id="build">2. 固定版本并构建完整镜像</h2><pre class="kb-code"><code>git clone --branch 2025.02.18 --depth 1 https://gitlab.com/buildroot.org/buildroot.git buildroot
+  bzip2 gzip xz-utils patch sed gawk qemu-system-x86
+</code></pre>
+<p>不要用 <code>sudo make</code>。这里的 sudo 仅用于安装主机依赖。</p></div>
+      <div class="kb-section"><h2 id="build">2. 固定版本并生成基础配置</h2>
+<pre class="kb-code"><code class="language-bash">git clone --branch 2025.02.18 --depth 1 https://gitlab.com/buildroot.org/buildroot.git buildroot
 cd buildroot
 git describe --tags --always
 make qemu_x86_64_defconfig
 make
-ls -lh output/images/
+</code></pre>
+<p><code>make</code> 会下载源码并依次构建工具链、目标软件、内核和根文件系统。首次构建不要盲目加顶层 <code>-j</code>；构建结束后检查：</p>
+<pre class="kb-code"><code class="language-bash">ls -lh output/images/
 test -s output/images/bzImage
-test -s output/images/rootfs.ext2</code></pre><p>首次构建会下载源码并生成工具链、目标软件、内核与根文件系统；不要盲目给顶层 <code>make</code> 加 <code>-j</code>。读懂产物目录，排错和发布才不会混淆：</p><table class="kb-table"><thead><tr><th>路径</th><th>用途</th></tr></thead><tbody><tr><td><code>.config</code></td><td>本次构建的完整选择；用 <code>make savedefconfig</code> 提炼为便于版本管理的板级配置</td></tr><tr><td><code>output/build/</code></td><td>各组件的解包、配置和编译现场</td></tr><tr><td><code>output/host/</code></td><td>主机工具、交叉工具链和目标 sysroot；<code>output/staging/</code> 是指向 sysroot 的兼容性链接</td></tr><tr><td><code>output/target/</code></td><td>接近目标根文件系统的安装树，但缺少正确设备节点和部分权限，<strong>不能直接部署</strong></td></tr><tr><td><code>output/images/</code></td><td>内核、根文件系统及当前配置所选择的其他最终产物</td></tr></tbody></table></div>
-      <div class="kb-section"><h2 id="boot">3. 启动 QEMU 并验证</h2><p>使用所选 defconfig 的<a href="https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt">板级说明</a>中的启动参数：</p><pre class="kb-code"><code>qemu-system-x86_64 -M pc \
+test -s output/images/rootfs.ext2
+</code></pre>
+<p>读懂产物目录，排错和发布才不会混淆：</p>
+<table class="kb-table">
+<thead>
+<tr>
+<th>路径</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.config</code></td>
+<td>本次构建的完整选择；用 <code>make savedefconfig</code> 提炼为便于版本管理的板级配置</td>
+</tr>
+<tr>
+<td><code>output/build/</code></td>
+<td>各组件的解包、配置和编译现场</td>
+</tr>
+<tr>
+<td><code>output/host/</code></td>
+<td>主机工具、交叉工具链和目标 sysroot；<code>output/staging/</code> 是指向 sysroot 的兼容性链接</td>
+</tr>
+<tr>
+<td><code>output/target/</code></td>
+<td>接近目标根文件系统的安装树，但缺少正确设备节点和部分权限，<strong>不能直接部署</strong></td>
+</tr>
+<tr>
+<td><code>output/images/</code></td>
+<td>内核、根文件系统及当前配置所选择的其他最终产物</td>
+</tr>
+</tbody>
+</table></div>
+      <div class="kb-section"><h2 id="boot">3. 用 QEMU 启动并验证</h2>
+<p>此命令对应所选 defconfig 自带的 <a href="https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt">QEMU 说明</a>：</p>
+<pre class="kb-code"><code class="language-bash">qemu-system-x86_64 -M pc \
   -kernel output/images/bzImage \
   -drive file=output/images/rootfs.ext2,if=virtio,format=raw \
   -append 'rootwait root=/dev/vda console=tty1 console=ttyS0' \
-  -serial stdio -net nic,model=virtio -net user</code></pre><p>登录提示默认出现在 QEMU 图形窗口。进入客户机后检查：</p><pre class="kb-code"><code>uname -a
+  -serial stdio -net nic,model=virtio -net user
+</code></pre>
+<p>登录提示默认出现在 QEMU 图形窗口。进入系统后执行：</p>
+<pre class="kb-code"><code class="language-sh">uname -a
 cat /proc/cmdline
 cat /proc/1/comm
-mount | grep ' on / '</code></pre><p>确认内核、根设备、init 和根文件系统后，从客户机运行 <code>poweroff</code>。不要直接修改 <code>rootfs.ext2</code> 充当持久配置。</p></div>
-      <div class="kb-section"><h2 id="custom">4. 加一个开机动作</h2><p>这个最小配置使用 BusyBox init，不是 systemd。先执行 <code>mkdir -p board/demo/overlay/etc/init.d</code>，再创建 <code>board/demo/overlay/etc/init.d/S99demo</code>：</p><pre class="kb-code"><code>#!/bin/sh
-case "$1" in
+mount | grep ' on / '
+</code></pre>
+<p>看到内核版本、<code>root=/dev/vda</code>、init 进程及挂载的根文件系统，才算走通“内核 → init → 用户空间”。离开 QEMU 时从客户机执行 <code>poweroff</code>；不要直接修改 <code>output/images/rootfs.ext2</code> 充当持久配置。</p></div>
+      <div class="kb-section"><h2 id="custom">4. 加入一个开机动作</h2>
+<p>Buildroot 的默认轻量方案使用 BusyBox init，而不是自动拥有 systemd。先运行 <code>mkdir -p board/demo/overlay/etc/init.d</code>，再创建 <code>board/demo/overlay/etc/init.d/S99demo</code>，内容为：</p>
+<pre class="kb-code"><code class="language-sh">#!/bin/sh
+case &quot;$1&quot; in
   start) echo 'Buildroot demo is ready' &gt;/dev/console ;;
   stop) ;;
   *) exit 1 ;;
-esac</code></pre><p>运行 <code>chmod +x board/demo/overlay/etc/init.d/S99demo</code>，再执行 <code>make menuconfig</code>；在 <strong>System configuration → Root filesystem overlay directories</strong> 填入 <code>board/demo/overlay</code>。保存后再次 <code>make</code>、启动 QEMU。启动日志应出现提示，客户机中可用 <code>test -x /etc/init.d/S99demo</code> 检查。正式应用应做成 package，overlay 仅用于最小演示。</p></div>
-      <div class="kb-section"><h2 id="hardware">5. 固化配置并迁移到真实硬件</h2><pre class="kb-code"><code>make savedefconfig BR2_DEFCONFIG=board/demo/demo_defconfig
-git status --short</code></pre><p>提交 defconfig、overlay、补丁与版本清单，不提交整个 <code>output/</code>。只有配置文件还不足以保证逐字节复现：还要固定 Buildroot 与外部源码版本、补丁、工具链及构建环境。真实开发板需对应的 board defconfig，并逐项核对 CPU/ABI、Bootloader、内核配置、设备树、分区、串口和刷机方法；QEMU 镜像不能直接刷进不相干的硬件。构建失败查看失败包及 <code>output/build/</code>；启动失败先检查内核命令行、根设备和串口。Buildroot 也不会自动解决 OTA、安全更新和产品生命周期管理；发布前处理软件许可证及源代码提供义务。若项目需要多层元数据和发行版策略，可对照<a href="/posts/yocto-from-zero/">Yocto 从零构建篇</a>选择方案。</p></div>
-      <div class="kb-section"><h2 id="flow">6. 从配置到镜像：逐层理解构建</h2><p>Buildroot 的菜单是在描述目标产品需要哪些组件。<code>make qemu_x86_64_defconfig</code> 把维护过的默认选择写进 <code>.config</code>；<code>make menuconfig</code> 修改选项；顶层 Makefile 按软件包依赖安排任务。工具链提供目标编译器、链接器和 C 库，用户空间程序使用这套工具链；内核与 Bootloader 分别从各自上游源码构建。</p><p>例如，选中一个依赖 OpenSSL 的网络程序时，依赖图会先准备目标头文件和库，再交叉编译该程序。每个包的 <code>.mk</code> 说明源码地址、配置、编译和安装方式；<code>Config.in</code> 决定菜单选项。根文件系统 skeleton、包、overlay、设备表与权限共同形成用户空间，文件系统生成器最后打包成所选格式。这就是 Makefile 驱动的集成工程能够构建完整系统的原因：Buildroot 组织构建，组件仍是独立项目。</p><table class="kb-table"><thead><tr><th>阶段</th><th>主要输入</th><th>结果</th></tr></thead><tbody><tr><td>配置</td><td>defconfig、menuconfig、板级选项</td><td><code>.config</code>、内核与 BusyBox 配置</td></tr><tr><td>工具链</td><td>CPU/ABI、C 库、编译器版本</td><td><code>output/host/bin/</code> 下的交叉工具</td></tr><tr><td>系统组件</td><td>内核、可选 Bootloader、BusyBox、软件包</td><td>安装至 staging/target 的文件</td></tr><tr><td>镜像生成</td><td>skeleton、overlay、设备表、文件系统类型</td><td><code>output/images/</code> 中的启动/烧录产物</td></tr></tbody></table><p>Buildroot 可构建内部工具链，也可接外部交叉工具链；C 库按目标选择。QEMU 示例由虚拟固件加载内核，适合验证内核与用户空间协作。真实板通常还要准备 Bootloader、DDR/启动介质初始化、设备树及厂商 BSP，应提前划分 Buildroot 与厂商 BSP 各自负责的部分。</p></div>
-      <div class="kb-section"><h2 id="config">7. 配置修改与小步迭代</h2><pre class="kb-code"><code>mkdir -p board/demo
-cp .config board/demo/qemu_x86_64_base.config
+esac
+</code></pre>
+<p>设置可执行权限：</p>
+<pre class="kb-code"><code class="language-bash">chmod +x board/demo/overlay/etc/init.d/S99demo
+make menuconfig
+</code></pre>
+<p>在 <strong>System configuration → Root filesystem overlay directories</strong> 中填入 <code>board/demo/overlay</code>，保存后执行 <code>make</code> 并再次启动 QEMU。启动日志应出现 <code>Buildroot demo is ready</code>，在客户机也可运行 <code>test -x /etc/init.d/S99demo</code>。正式应用应做成 Buildroot package，并根据选定 init 系统提供启动配置；overlay 适合这个最小演示，不应代替长期的包管理。</p></div>
+      <div class="kb-section"><h2 id="hardware">5. 固化配置、适配硬件与排错</h2>
+<pre class="kb-code"><code class="language-bash">make savedefconfig BR2_DEFCONFIG=board/demo/demo_defconfig
+git status --short
+</code></pre>
+<p>提交 <code>demo_defconfig</code>、overlay、补丁及版本清单，不提交整个 <code>output/</code>。只有配置文件还不足以保证逐字节复现：还要固定 Buildroot 与外部源码版本、补丁、工具链及构建环境。对真实板卡，先选择或编写匹配的 board defconfig，再确认 CPU/ABI、Bootloader、内核配置、设备树、存储分区、串口和刷机方式；QEMU 镜像不能直接刷入不相干的硬件。构建失败先读最后一个失败包的日志和 <code>output/build/</code>，启动失败先核对内核命令行、根设备和串口，避免无目的地清空整个输出目录。Buildroot 也不会自动解决 OTA、安全更新和产品生命周期管理；软件许可证和源代码提供义务须在发布前处理。若项目需要多层元数据和发行版策略，可对照<a href="/posts/yocto-from-zero/">Yocto 从零构建篇</a>选择方案。</p></div>
+      <div class="kb-section"><h2 id="flow">6. 从配置到镜像：逐层理解这次构建</h2>
+<p>Buildroot 的菜单不是在 Linux 源码里打开一个“全部编译”开关，而是在描述目标产品需要哪些组件。<code>make qemu_x86_64_defconfig</code> 把一组经过维护的默认选择写进 <code>.config</code>；<code>make menuconfig</code> 会在这份配置上修改选项；顶层 Makefile 再根据各软件包的依赖关系安排任务。工具链先提供目标架构的编译器、链接器和 C 库，后续用户空间程序和库都使用这套工具链；内核和 Bootloader 则分别由它们自己的上游源码构建。</p>
+<p>例如选中一个依赖 OpenSSL 的网络程序时，Buildroot 会把 OpenSSL 纳入依赖图，先准备它需要的目标头文件和库，再交叉编译该程序。每个包的 <code>.mk</code> 文件说明源码从哪里来、怎样配置和编译、安装哪些文件；<code>Config.in</code> 决定它如何出现在配置菜单中。根文件系统 skeleton、overlay、选中的包和权限/设备表共同决定目标系统的用户空间，文件系统生成器最后把它们打包成 ext2、tar、squashfs 等所选格式。这就是一个 Makefile 驱动的集成工程能构建完整系统的原因：Buildroot 是组织者，具体组件仍是独立项目。</p>
+<table class="kb-table">
+<thead>
+<tr>
+<th>阶段</th>
+<th>主要输入</th>
+<th>典型结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>配置</td>
+<td>defconfig、menuconfig、板级配置</td>
+<td><code>.config</code>、内核与 BusyBox 配置</td>
+</tr>
+<tr>
+<td>工具链</td>
+<td>CPU/ABI、C 库、编译器版本</td>
+<td><code>output/host/bin/</code> 下的交叉工具</td>
+</tr>
+<tr>
+<td>系统组件</td>
+<td>内核、可选 Bootloader、BusyBox、应用包</td>
+<td>安装到 staging/target 的文件</td>
+</tr>
+<tr>
+<td>镜像生成</td>
+<td>rootfs skeleton、overlay、设备表、文件系统类型</td>
+<td><code>output/images/</code> 中可启动或可烧录的文件</td>
+</tr>
+</tbody>
+</table>
+<p>Buildroot 能选择内置工具链，也能接入外部交叉工具链；C 库可按目标选择。QEMU 示例通过 <code>-kernel</code> 直接加载内核，适合先验证内核与用户空间协作，但不会验证固件或 Bootloader 如何找到并装载内核。真实板卡通常要另外选对 Bootloader、DDR/启动介质初始化、设备树和厂商 BSP。哪些步骤由 Buildroot 管、哪些由板级厂商提供，要在开工时写清楚。</p></div>
+      <div class="kb-section"><h2 id="config">7. 配置修改与小步迭代</h2>
+<p>第一次构建后，建议先保存原始配置，再只改一个选项观察变化：</p>
+<pre class="kb-code"><code class="language-bash">cp .config board/demo/qemu_x86_64_base.config
 make menuconfig
 diff -u board/demo/qemu_x86_64_base.config .config
 make
 make savedefconfig BR2_DEFCONFIG=board/demo/demo_defconfig
-diff -u configs/qemu_x86_64_defconfig board/demo/demo_defconfig</code></pre><p>常用菜单包括 <strong>Target options</strong>（架构/ABI）、<strong>Toolchain</strong>（C 库/编译器）、<strong>System configuration</strong>（hostname、密码策略、init 和设备管理）、<strong>Target packages</strong>、<strong>Kernel</strong> 与 <strong>Filesystem images</strong>。每增加一个软件包都会增加镜像、依赖、维护和安全工作，应从板卡与应用需求出发选择。</p><p>Linux、BusyBox 和 C 库有各自的配置器，不是 Buildroot 包菜单本身：</p><pre class="kb-code"><code>make linux-menuconfig
+diff -u configs/qemu_x86_64_defconfig board/demo/demo_defconfig || true
+</code></pre>
+<p>在菜单中常见的调整位置包括 <strong>Target options</strong>（架构和 ABI）、<strong>Toolchain</strong>（C 库与编译器）、<strong>System configuration</strong>（hostname、密码策略、init 和设备管理）、<strong>Target packages</strong>（用户空间软件）、<strong>Kernel</strong> 以及 <strong>Filesystem images</strong>。先确定目标板和应用的需求，再选择组件；随意增加包会放大镜像、增加依赖与攻击面，也会增加后续升级责任。</p>
+<p>Linux 内核、BusyBox 和 C 库各有自己的配置，不能把它们的选项误当成 Buildroot 本身的包选项。相应配置器可以这样打开：</p>
+<pre class="kb-code"><code class="language-bash">make linux-menuconfig
 make busybox-menuconfig
-make uclibc-menuconfig   # 仅当配置使用 uClibc-ng</code></pre><p>内核配置可用 <code>make linux-update-defconfig</code> 保存；BusyBox 有 <code>busybox-update-config</code>。可用目标依配置而异，先查 <code>make help</code> 和固定版本的手册。将精简 defconfig、内核/BusyBox 配置、补丁和 overlay 一起纳入版本控制，不要提交含本机绝对路径的单份 <code>.config</code>。修改包后可先单独重建：</p><pre class="kb-code"><code>make openssl-show-depends
+make uclibc-menuconfig   # 仅当当前配置使用 uClibc-ng
+</code></pre>
+<p>保存内核配置可用 <code>make linux-update-defconfig</code>；BusyBox 也有对应的 <code>busybox-update-config</code> 目标。具体目标会因当前配置而异，先执行 <code>make help</code> 或查看所选版本的手册。将精简后的 defconfig、内核/BusyBox 配置、补丁和 overlay 一起纳入版本控制；不要只提交 <code>.config</code>，也不要把本机绝对路径写进配置。</p>
+<p>修改某个软件包后，可以先用它自己的目标重建，而不是立刻删除整个 <code>output/</code>：</p>
+<pre class="kb-code"><code class="language-bash">make openssl-show-depends
 make openssl-rebuild
-make V=1</code></pre><p>把示例中的包名换成实际 target。<code>V=1</code> 显示完整编译命令，便于检查参数、头文件和链接库；若改了配置或依赖，单独 rebuild 可能不够，按需使用该包的 reconfigure/dirclean，再由顶层 make 更新依赖。</p></div>
-      <div class="kb-section"><h2 id="service">8. 添加文件、应用与服务</h2><p>Root filesystem overlay 适合少量默认配置、静态文件和启动脚本；overlay 的目录层级对应目标根目录，<code>board/demo/overlay/etc/...</code> 会出现在客户机的 <code>/etc/...</code>。本文的 <code>S99demo</code> 使用 BusyBox init。Buildroot 的 init 可配置；若选 systemd，应使用 systemd unit 和相应包配置，不能把 BusyBox <code>/etc/init.d/</code> 脚本当成通用服务定义。</p><p>overlay 不能替代软件包。正式应用应做成 Buildroot package，让源码版本、依赖、编译参数、安装路径与许可证信息可审查和重建。自定义 package 通常由 <code>Config.in</code> 与 <code>.mk</code> 组成：前者定义 Kconfig 选项与依赖，后者描述源码获取、交叉编译和安装。将它们放进 <code>BR2_EXTERNAL</code> 外部树并与产品 defconfig 一起版本管理，避免直接修改 Buildroot 上游树。需要多发行版和更多元数据复用时，继续看<a href="/posts/yocto-from-zero/">Yocto 从零构建篇</a>。</p></div>
-      <div class="kb-section"><h2 id="troubleshoot">9. 分开排查构建与启动问题</h2><table class="kb-table"><thead><tr><th>现象</th><th>先检查</th><th>下一步</th></tr></thead><tbody><tr><td>下载失败</td><td><code>output/build/&lt;package&gt;/</code>、<code>dl/</code>、错误末尾</td><td>检查网络/代理、上游地址和校验值，区分下载与编译错误</td></tr><tr><td>缺头文件或库</td><td>失败包的 <code>config.log</code>、依赖菜单</td><td>确认依赖已选中且没有混淆 host/target 包</td></tr><tr><td>链接到主机架构</td><td>编译命令、<code>output/host/bin/</code></td><td>目标包必须使用 Buildroot 的交叉工具链</td></tr><tr><td>QEMU 找不到根文件系统</td><td>启动参数、实际文件名、<code>/proc/cmdline</code></td><td>核对 virtio 根设备和实际生成的格式</td></tr><tr><td>内核启动但无登录提示</td><td><code>console=</code>、getty、QEMU 串口/窗口</td><td>使用当前 defconfig 对应的板级说明</td></tr><tr><td>overlay 文件未进镜像</td><td><code>.config</code> 中的路径、文件权限</td><td>保存 overlay 配置并确认启动脚本可执行</td></tr></tbody></table><p>日志通常能指出真正失败的软件包。修复依赖、工具链选择或补丁后重建受影响的包；只有确认输出状态损坏才全量清理。网络受限时可先运行 <code>make source</code> 获取当前配置需要的源码，再将下载目录带到构建机。</p></div>
-      <div class="kb-section"><h2 id="product">10. 从 QEMU 演示走向产品</h2><p>QEMU 只验证配置能否启动，不验证真实板卡的 DDR、启动介质、GPIO、显示、无线、电源管理和量产刷写。先获取厂商 BSP 与版本支持范围，逐项确认 SoC/ABI、启动阶段、内核 defconfig、设备树、根分区、分区表、串口和升级/回滚策略；先启动最小镜像，再分批加入驱动和应用并保存镜像与串口日志。</p><pre class="kb-code"><code>make legal-info</code></pre><p>审阅 <code>output/legal-info/README</code> 中的警告、组件清单和许可证文本。它只是合规审查的辅助材料。版本库至少保存固定 Buildroot 版本、defconfig、外部树、补丁、板级文件、应用版本和构建说明；CI 应在干净 Linux 主机上重建并保存产物哈希。现场升级还需独立设计签名验证、A/B 或恢复分区、回滚、密钥管理和安全更新策略。</p></div>
-      <div class="kb-section"><h2>参考与下一篇</h2><p><a href="https://buildroot.org/downloads/manual/manual.html">Buildroot 官方手册</a> · <a href="https://buildroot.org/download.html">2025.02 LTS 下载信息</a> · <a href="https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt">QEMU 板级说明</a> · <a href="https://mp.weixin.qq.com/s/nGNtRB45EYnPZSHch7_56g">PPSBBS 技术论坛原文</a>（本文重新组织和核对技术内容，不转载原文图表）· <a href="/posts/yocto-from-zero/">下一篇：Yocto 从零构建</a> · <a href="/knowledge-base/">知识库</a></p></div>
+make V=1
+</code></pre>
+<p>这里以已选中的 OpenSSL 包为例。<code>V=1</code> 会显示更完整的命令，便于发现编译器参数、头文件路径或链接库的问题。如果改动改变了包的配置或依赖，单次 rebuild 可能不足，按提示使用该包的 reconfigure/dirclean 目标，再让顶层 <code>make</code> 重建受影响的依赖。</p></div>
+      <div class="kb-section"><h2 id="service">8. 给镜像加入自己的文件和服务</h2>
+<p>Root filesystem overlay 适合加入少量默认配置、静态资源和启动脚本。overlay 的目录层次对应目标根目录：<code>board/demo/overlay/etc/...</code> 最后会成为客户机里的 <code>/etc/...</code>。本文的 <code>S99demo</code> 是 BusyBox init 的演示脚本；Buildroot 的 init 系统是可配置项，换成 systemd 时应按 systemd 的 unit 与包配置，不要把 BusyBox 的 <code>/etc/init.d/</code> 脚本当成通用服务定义。</p>
+<p>overlay 不能代替软件包。正式应用应做成 Buildroot package，使源码版本、依赖、构建参数、安装路径和许可证信息可审查、可重建、可复用。自定义 package 一般由 <code>Config.in</code> 和 <code>.mk</code> 构成：前者定义 Kconfig 选项及依赖，后者描述源码获取、交叉编译、安装和许可证。团队可把这些文件放进 <code>BR2_EXTERNAL</code> 外部树，避免直接修改 Buildroot 上游树；外部树与产品 defconfig 一起纳入 Git。若产品需要不同 init、多个板型、镜像生命周期管理或大规模软件层复用，继续阅读<a href="/posts/yocto-from-zero/">Yocto 从零构建篇</a>并评估它的元数据工作流。</p></div>
+      <div class="kb-section"><h2 id="troubleshoot">9. 构建失败与启动失败，分开排查</h2>
+<table class="kb-table">
+<thead>
+<tr>
+<th>现象</th>
+<th>先看哪里</th>
+<th>常见原因或下一步</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>下载阶段报错</td>
+<td><code>output/build/&lt;包名&gt;/</code>、<code>dl/</code>、终端最后一段错误</td>
+<td>网络/代理、上游地址变化、校验值不符；确认错误发生在下载还是编译</td>
+</tr>
+<tr>
+<td>找不到头文件或库</td>
+<td>失败包的 <code>config.log</code>、<code>output/host/</code>、依赖菜单</td>
+<td>依赖包未选中、配置缓存过期或 host 与 target 包混淆</td>
+</tr>
+<tr>
+<td>链接到主机架构</td>
+<td>失败命令中的编译器、<code>output/host/bin/</code></td>
+<td>使用了主机 <code>gcc</code>；目标包必须用 Buildroot 提供的交叉工具链</td>
+</tr>
+<tr>
+<td>QEMU 找不到根文件系统</td>
+<td>启动参数、镜像文件名、客户机 <code>/proc/cmdline</code></td>
+<td>根设备名与 <code>if=virtio</code> 不匹配，或实际镜像格式/文件名不同</td>
+</tr>
+<tr>
+<td>内核已启动但没有登录提示</td>
+<td><code>console=</code> 参数、getty 配置、QEMU 图形窗口/串口</td>
+<td>控制台选项不匹配；先使用该 defconfig 对应的板级说明</td>
+</tr>
+<tr>
+<td>自定义文件没有进入镜像</td>
+<td><code>.config</code> 中的 overlay 路径、overlay 内路径和权限</td>
+<td>overlay 选项未保存，路径相对目录错误，或启动脚本没有可执行权限</td>
+</tr>
+</tbody>
+</table>
+<p>构建日志一般先显示真正失败的包。修复上游依赖、工具链选项或补丁后，再重建相关包；把“清空所有输出后重试”留给已确认状态损坏的情况，因为全量重建会重新消耗时间和下载流量。网络受限时可先运行 <code>make source</code> 下载已选配置需要的源码，再将下载目录带到构建环境。</p></div>
+      <div class="kb-section"><h2 id="product">10. 从 QEMU 演示走向可交付产品</h2>
+<p>QEMU 验证的是一套已选配置能否启动，不会验证真实板卡的 DDR 初始化、启动介质、GPIO、显示、无线、电源管理和量产刷写。移植到开发板时先索取厂商 BSP 与推荐版本，确认 SoC/ABI、Bootloader 先后阶段、内核 defconfig、设备树、根分区、分区表、串口与升级回滚机制。先启动最小系统，再分批加入驱动和应用，每一阶段保存可复现的镜像及串口日志。</p>
+<p>交付前生成并审阅软件清单与许可材料：</p>
+<pre class="kb-code"><code class="language-bash">make legal-info
+</code></pre>
+<p>检查 <code>output/legal-info/README</code> 的警告、组件清单和许可文本。该命令能收集辅助材料，但不能替代逐项许可证审查。版本库至少保存 Buildroot 固定版本/提交、defconfig、外部树、补丁、板级文件、应用源码版本和构建说明；持续集成应在干净 Linux 主机上实际构建，并保存最终镜像哈希。对于现场升级，还需另行设计签名验证、A/B 分区或恢复分区、失败回滚、密钥管理和安全更新策略，这些不由一次 <code>make</code> 自动提供。</p></div>
+      <div class="kb-section"><h2 id="architecture">11. 打开 Buildroot 源码树：Makefile、Kconfig 和软件包</h2>
+<p>Buildroot 看起来像一个大型 C 工程，容易让人误以为 <code>make</code> 最后会把 Buildroot 自己编译成 Linux。更准确地说，它是一个<strong>构建编排器</strong>：顶层 Makefile 读取 <code>.config</code>，按配置调用工具链、软件包、内核、Bootloader 和文件系统生成规则。大部分目标软件来自上游源代码；Buildroot 保存的是版本选择、配置片段、补丁和“怎样构建/安装它”的规则。</p>
+<pre class="kb-code"><code class="language-text">Buildroot 源码树
+├── Makefile / Config.in       顶层入口与配置系统
+├── arch/                      CPU 架构、ABI 与架构默认值
+├── toolchain/                 GCC、binutils、内核头文件、C 库
+├── package/&lt;name&gt;/            用户态软件包的配置、构建规则和补丁
+├── linux/、boot/              Linux 内核与 Bootloader 规则
+├── system/                    根文件系统骨架、init 和系统配置
+├── fs/                        ext2、tar、squashfs 等镜像生成规则
+├── board/&lt;vendor&gt;/&lt;board&gt;/    板级 defconfig、内核配置、overlay、脚本
+└── configs/                   可直接加载的 defconfig
+</code></pre>
+<p>一个常见软件包目录至少会有 <code>Config.in</code> 和 <code>&lt;package&gt;.mk</code>。前者向 Kconfig 注册 <code>BR2_PACKAGE_*</code> 选项及依赖，后者告诉包基础设施源码版本/位置、依赖、编译方式、目标安装规则和许可证信息；需要修补上游代码时还会有 <code>*.patch</code>，需要校验下载内容时配套 <code>.hash</code>。因此菜单里“看不到某个包”，可能是外部树没有加载、Kconfig 依赖不满足，或这个包并不支持当前架构/工具链，而不一定是 Makefile 出错。</p>
+<p>顶层构建通常先准备主机侧工具和交叉工具链，再依赖关系构建目标库与应用、内核/可选 Bootloader，最后组装根文件系统并生成镜像。实际先后次序由依赖图决定，彼此独立的包可以并行；包的源码、编译现场和 stamp 状态通常在 <code>output/build/</code>。这也解释了为什么只改配置不一定让所有已编译包都自动重做：Buildroot 面向的是产品镜像集成构建，不是目标机上的通用软件包管理器。</p>
+<p>把源码和构建结果分开，可以避免把个人配置或大体积输出混入上游树：</p>
+<pre class="kb-code"><code class="language-bash"># 在 buildroot 源码树根目录执行；O 建议使用绝对路径
+make O=&quot;$PWD/out-qemu&quot; qemu_x86_64_defconfig
+make O=&quot;$PWD/out-qemu&quot; menuconfig
+make O=&quot;$PWD/out-qemu&quot;
+</code></pre>
+<p>此时配置文件也在 <code>out-qemu/.config</code>。保存产品的精简配置时使用 <code>make O=&quot;$PWD/out-qemu&quot; savedefconfig BR2_DEFCONFIG=&quot;$PWD/board/demo/demo_defconfig&quot;</code>。不要同时对同一个输出目录启动两个互相修改配置的构建；要并行验证多套配置，就为每套配置分配独立 <code>O=</code> 目录。</p></div>
+      <div class="kb-section"><h2 id="cross-compile">12. 交叉编译的关键：目标三元组、ABI 和 C 库</h2>
+<p>在开发机上输入 <code>gcc hello.c -o hello</code>，编译器通常生成能在开发机运行的程序。嵌入式产品需要的是另一种组合：构建过程运行在 x86_64 Linux 主机上，输出程序却可能运行在 ARM64 板卡上。交叉编译器负责生成目标架构的指令，并按目标的 ABI、浮点调用约定、C 库和头文件来编译/链接。</p>
+<pre class="kb-code"><code class="language-text">Build machine: 运行 make / Buildroot 的 Linux 主机
+Target:         最终运行程序的处理器、ABI、C 库与系统接口
+Toolchain:      在主机上运行、但输出 Target 可执行文件的编译器与链接器
+</code></pre>
+<p>Buildroot 的 <code>output/host/</code> 名字容易让人误会成“目标机文件”。这里放的是<strong>运行在构建主机上的工具</strong>，包括交叉编译器、主机辅助工具和目标 sysroot；<code>output/staging/</code> 通常是该 sysroot 的兼容入口，供依赖库的包在编译时查找目标头文件与库。<code>output/target/</code> 则是待组装的目标根文件系统树；最终供刷机/启动的文件要从 <code>output/images/</code> 取，不能把前三者混作一谈。</p>
+<p>内部工具链由 Buildroot 配置并构建，集成紧密，但改变 GCC、C 库或工具链关键选项往往需要重建整套系统。外部工具链适合芯片厂商已经提供固定 SDK、或组织已有验证过的工具链的场景；要确认架构、ABI、C 库、线程/C++ 等能力与 Buildroot 选项一致。不能简单拿开发机发行版自带的 <code>/usr/bin/gcc</code> 当成 ARM 工具链。</p>
+<p>C 库实现了大部分用户程序调用的 libc API，并通过系统调用接口与 Linux 内核交互。Buildroot 可按版本和目标选择 glibc、musl 或 uClibc-ng；它们在体积、兼容性、功能和目标应用支持上有不同取舍。更换 C 库或其配置不是无害的小改动：已编译二进制的动态链接器、符号版本和 ABI 可能改变，通常要全量重建。内核头文件也参与工具链构建，选择的头文件版本不能比将来运行的内核接口更新到目标内核不具备的程度。</p>
+<p>排查“程序编译成功但板上不能运行”，先看它到底为哪个架构/ABI 生成、依赖哪些动态库，而不是直接重编内核：</p>
+<pre class="kb-code"><code class="language-bash">file output/target/usr/bin/hello-demo
+readelf -h output/target/usr/bin/hello-demo
+readelf -l output/target/usr/bin/hello-demo | grep interpreter
+</code></pre>
+<p><code>file</code>/<code>readelf</code> 能检查 ELF 架构和动态加载器路径；主机上的 <code>ldd</code> 不能拿来验证一个不同架构的目标程序。应用团队若需在 Buildroot 之外独立开发，可用 <code>make sdk</code> 导出 SDK，并在构建说明中标注 SDK 对应的 Buildroot 配置、工具链和 sysroot；SDK 不是目标机的软件包管理器，也不会替代镜像版本管理。</p></div>
+      <div class="kb-section"><h2 id="boot-chain">13. 从上电到 PID 1：镜像里究竟有什么</h2>
+<p>“嵌入式 Linux 镜像”经常被当成一个文件来讲，其实至少要分清固件/Bootloader、内核、根文件系统以及启动参数。不同硬件的启动介质和阶段并不相同，Buildroot 可以根据配置构建其中若干部分，但不会凭一个 <code>make</code> 自动知道厂商板子的 DDR、时钟和 Flash 布局。</p>
+<pre class="kb-code"><code class="language-text">常见真实板启动（示意，具体取决于 SoC）
+Boot ROM → SPL/TPL（可选）→ U-Boot/其他 Bootloader
+         → Linux kernel + DTB + 可选 initramfs
+         → 挂载 rootfs → 执行 PID 1（init）→ 启动服务 / 登录
+
+本文 QEMU 启动方式
+QEMU -kernel bzImage → 直接启动 Linux
+                    → virtio 磁盘上的 rootfs.ext2（root=/dev/vda）
+                    → init → 用户空间
+</code></pre>
+<p>QEMU 命令里的 <code>-kernel output/images/bzImage</code> 是 direct-kernel boot：QEMU 把内核映像交给虚拟机直接启动，<code>-append</code> 将内核命令行传给内核，<code>-drive ... if=virtio</code> 提供虚拟磁盘。本例因此能检查内核识别 virtio 根盘、挂载 ext2、找到 init 并启动用户空间，但不会验证 BIOS/UEFI 如何搜寻启动设备，也不会验证 U-Boot 的环境变量、脚本、TFTP/SPI/eMMC 启动、DTB 传递或真实板级电源时序。需要验证这些环节，应选支持对应机器模型的 QEMU 启动方式，或在目标板串口上按厂商启动链做测试。</p>
+<p>内核挂载根文件系统后，通常启动 <code>/sbin/init</code>（或由内核参数指定其他 init）。PID 1 再负责挂载必要的虚拟文件系统、设备节点管理、启动服务和提供登录入口。Buildroot 的默认方案是 BusyBox init；用户态最小不意味着应用就自动能工作：根文件系统还必须有正确的动态加载器、共享库、配置文件、设备节点/权限、DNS/时区/证书等产品需要的文件。</p>
+<p>设备管理也是一个常被漏掉的连接点。内核 <code>devtmpfs</code> 可创建基础设备节点；简单系统可以先只用它，应用需要热插拔处理或固件加载时再评估 mdev/eudev；选择 systemd 时设备管理由 systemd/udev 路径处理。内核配置、Buildroot 的 <code>/dev</code> 管理选项与用户态服务要互相匹配。看到 <code>/dev/console</code> 存在，并不代表 I2C、网卡或自定义驱动已经正确工作。</p></div>
+      <div class="kb-section"><h2 id="external-package">14. 从空外部树加入一个 C 程序：BR2_EXTERNAL 实战</h2>
+<p>在 <code>output/target/</code> 临时复制一个二进制只能做一次性验证；下次全量清理就会消失，也无法清楚描述源码、依赖和许可证。产品代码更适合做成 Buildroot package，并把公司/项目定制放在独立的 <code>BR2_EXTERNAL</code> 树中。这样 Buildroot 上游代码可保持干净，应用包、板级文件和 defconfig 又能一起提交审查。</p>
+<p>先准备并列的源码目录：</p>
+<pre class="kb-code"><code class="language-text">workspace/
+├── buildroot/                 # 固定到 2025.02.18
+└── br2-external/
+    ├── external.desc
+    ├── Config.in
+    ├── external.mk
+    └── package/hello-demo/
+        ├── Config.in
+        ├── hello-demo.mk
+        ├── S99hello-demo
+        ├── hello-demo.service
+        └── src/
+            ├── main.c
+            └── LICENSE
+</code></pre>
+<p>外部树至少需要名称描述、Kconfig 入口和 Makefile 入口。<code>external.desc</code> 的 <code>name: DEMO</code> 生成可供配置与 recipe 使用的 <code>BR2_EXTERNAL_DEMO_PATH</code>：</p>
+<pre class="kb-code"><code class="language-text">name: DEMO
+desc: Demo product packages
+</code></pre>
+<pre class="kb-code"><code class="language-make"># br2-external/Config.in
+source &quot;$BR2_EXTERNAL_DEMO_PATH/package/hello-demo/Config.in&quot;
+</code></pre>
+<pre class="kb-code"><code class="language-make"># br2-external/external.mk
+include $(sort $(wildcard $(BR2_EXTERNAL_DEMO_PATH)/package/*/*.mk))
+</code></pre>
+<p><code>Config.in</code> 为 menuconfig 建立选择项；recipe 则使用 Buildroot 提供的 <code>generic-package</code> 基础设施，统一安排本地源码准备、依赖和目标安装步骤。</p>
+<pre class="kb-code"><code class="language-kconfig"># br2-external/package/hello-demo/Config.in
+config BR2_PACKAGE_HELLO_DEMO
+    bool &quot;hello-demo&quot;
+    help
+      A small C example built with the target toolchain.
+</code></pre>
+<pre class="kb-code"><code class="language-c">/* br2-external/package/hello-demo/src/main.c */
+#include &lt;stdio.h&gt;
+
+int main(void)
+{
+    puts(&quot;Hello from a Buildroot target!&quot;);
+    return 0;
+}
+</code></pre>
+<p>下面的 recipe 演示最核心的一条数据流：<code>$(TARGET_CC)</code> 是目标交叉编译器；<code>$(@D)</code> 是 Buildroot 准备好的包源码目录；只把运行所需的可执行文件安装到 <code>$(TARGET_DIR)</code>。<code>.mk</code> 中的包名大写前缀必须与包名对应。把标准 MIT 许可证文本放在 <code>src/LICENSE</code>，并按真实项目修改版权与许可证；不要为了让 <code>legal-info</code> 不报警而随便填写许可证。</p>
+<pre class="kb-code"><code class="language-make"># br2-external/package/hello-demo/hello-demo.mk
+HELLO_DEMO_VERSION = 1.0
+HELLO_DEMO_SITE = $(HELLO_DEMO_PKGDIR)/src
+HELLO_DEMO_SITE_METHOD = local
+HELLO_DEMO_LICENSE = MIT
+HELLO_DEMO_LICENSE_FILES = LICENSE
+
+define HELLO_DEMO_BUILD_CMDS
+    $(TARGET_CC) $(TARGET_CFLAGS) $(TARGET_LDFLAGS) \
+        -o $(@D)/hello-demo $(@D)/main.c
+endef
+
+define HELLO_DEMO_INSTALL_TARGET_CMDS
+    $(INSTALL) -D -m 0755 $(@D)/hello-demo \
+        $(TARGET_DIR)/usr/bin/hello-demo
+endef
+
+define HELLO_DEMO_INSTALL_INIT_SYSV
+    $(INSTALL) -D -m 0755 $(HELLO_DEMO_PKGDIR)/S99hello-demo \
+        $(TARGET_DIR)/etc/init.d/S99hello-demo
+endef
+
+define HELLO_DEMO_INSTALL_INIT_SYSTEMD
+    $(INSTALL) -D -m 0644 $(HELLO_DEMO_PKGDIR)/hello-demo.service \
+        $(TARGET_DIR)/usr/lib/systemd/system/hello-demo.service
+endef
+
+$(eval $(generic-package))
+</code></pre>
+<p>构建脚本会依据所选 init 系统调用相应的 <code>HELLO_DEMO_INSTALL_INIT_*</code> 规则。BusyBox/SysV 示例只在开机时运行一次并把输出送到控制台：</p>
+<pre class="kb-code"><code class="language-sh">#!/bin/sh
+# br2-external/package/hello-demo/S99hello-demo
+case &quot;$1&quot; in
+  start) /usr/bin/hello-demo &gt;/dev/console 2&gt;&amp;1 ;;
+  stop) ;;
+  restart) &quot;$0&quot; stop; &quot;$0&quot; start ;;
+  *) echo &quot;Usage: $0 {start|stop|restart}&quot; &gt;&amp;2; exit 1 ;;
+esac
+</code></pre>
+<p>systemd 对应的 unit 可写成：</p>
+<pre class="kb-code"><code class="language-ini"># br2-external/package/hello-demo/hello-demo.service
+[Unit]
+Description=Buildroot hello demo
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/hello-demo
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+<p>在 Buildroot 源码树根目录加载外部树，再选择包并构建：</p>
+<pre class="kb-code"><code class="language-bash">make BR2_EXTERNAL=../br2-external qemu_x86_64_defconfig
+make BR2_EXTERNAL=../br2-external menuconfig
+# 在 Target packages 的外部选项中启用 hello-demo，保存退出
+make BR2_EXTERNAL=../br2-external hello-demo
+make BR2_EXTERNAL=../br2-external
+</code></pre>
+<p>外部树相对路径按 Buildroot 源码树解释；生产脚本最好传绝对路径或由项目 Makefile 计算路径。<code>make hello-demo</code> 只构建这个 package，不等同于重打最终 rootfs；因此再运行顶层 <code>make</code> 生成镜像。启动 QEMU 后执行 <code>hello-demo</code> 验证二进制；如果同时安装了启动脚本/服务，再根据实际 init 用 <code>cat /proc/1/comm</code>、<code>systemctl status hello-demo.service</code> 或检查启动控制台输出来验证。修改应用源码后可用 <code>make hello-demo-rebuild all</code> 重新编译包并重打镜像。</p>
+<p>这个最小示例故意使用裸 <code>$(TARGET_CC)</code>。实际项目应按上游构建系统选 Buildroot 的 autotools、CMake、Meson 等 package infrastructure；链接其他库时在 <code>.mk</code> 声明依赖，并区分“构建主机运行的工具”与“目标设备运行的库”。若应用需要头文件供其他 target package 编译使用，除了 <code>TARGET_DIR</code>，还要按需安装到 <code>STAGING_DIR</code>。</p></div>
+      <div class="kb-section"><h2 id="init-systems">15. BusyBox init 和 systemd：同一个包要适配不同启动方式</h2>
+<p>init 是内核启动的第一个用户态进程，PID 必须为 1。Buildroot 默认选择 BusyBox init：它读取 Buildroot 的 <code>/etc/inittab</code>，执行 <code>/etc/init.d/rcS</code>，再按脚本名排序调用 <code>SNNname start</code>，同时按配置启动 getty。<code>SNN</code> 中的数字表达相对启动顺序，不是任意装饰；依赖网络的守护进程不能抢在网络配置脚本之前运行。</p>
+<pre class="kb-code"><code class="language-text">内核挂载根文件系统
+  → /sbin/init (BusyBox init, PID 1)
+  → /etc/inittab
+  → /etc/init.d/rcS
+  → S01... → S40network → S50... → getty/login
+</code></pre>
+<p>前一节的脚本只展示 one-shot 启动动作，不是可靠的守护进程管理脚本。真正后台服务要处理重复启动、停止、PID 文件、返回码和日志；Buildroot 手册建议 daemon package 提供符合约定的 SysV/BusyBox 启动脚本，常用 <code>start-stop-daemon</code> 管理前台进程，并为能用的服务提供 systemd unit。服务的二进制、配置、运行账户、权限、启动文件和许可证最好由同一个 package 管理，而不是散落在几个 overlay 里。</p>
+<p>切到 systemd 后，PID 1、设备管理、服务依赖与日志工具都会不同，并会引入 D-Bus、udev 等相应依赖，镜像不再等同于最小 BusyBox 组合。菜单中的 <code>System configuration → Init system</code> 决定系统 init；包的安装钩子仅安装所选 init 对应的文件。构建后验证时不要只看 unit 文件存在：检查 <code>cat /proc/1/comm</code>、<code>systemctl is-enabled hello-demo.service</code>、<code>systemctl is-active hello-demo.service</code> 与 <code>journalctl -u hello-demo.service -b</code>。若应用不需要 systemd 的服务依赖/设备管理能力，默认 BusyBox init 往往更轻；若产品依赖 D-Bus、复杂服务编排或 udev，再评估 systemd 的体积、启动行为和维护成本。</p></div>
+      <div class="kb-section"><h2 id="incremental-build">16. 增量构建不是“自动知道所有影响”：缓存与重建边界</h2>
+<p>Buildroot 会记录包的配置/构建阶段状态，但不会像完整发行版包管理器那样追踪每个已安装文件的所有反向影响。理解这一点，才能选择正确的重建范围：</p>
+<table class="kb-table">
+<thead>
+<tr>
+<th>改动</th>
+<th>通常怎么做</th>
+<th>为什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>overlay、post-build 或 post-image 脚本内容</td>
+<td>重新运行顶层 <code>make</code></td>
+<td>这些内容会在根文件系统组装/镜像阶段重新处理</td>
+</tr>
+<tr>
+<td>自己的应用源码，且 build rules 未变</td>
+<td><code>make hello-demo-rebuild all</code></td>
+<td>重编该包并继续组装镜像</td>
+</tr>
+<tr>
+<td>某包 configure 选项或依赖发生变化</td>
+<td><code>make hello-demo-reconfigure all</code>，必要时 <code>dirclean</code></td>
+<td>需要重新跑 configure，相关依赖变化可能还要重建消费者</td>
+</tr>
+<tr>
+<td>从镜像中删除已安装软件包</td>
+<td>通常全量清理后重建</td>
+<td>Buildroot 不维护每个包所安装文件的反向删除清单</td>
+</tr>
+<tr>
+<td>工具链、C 库、架构 ABI 改变</td>
+<td>评估并执行完整重建</td>
+<td>编译器、头文件、动态加载器和库 ABI 会影响整套目标程序</td>
+</tr>
+</tbody>
+</table>
+<p>包的下载/配置/编译日志通常在 <code>output/build/&lt;包名&gt;-&lt;版本&gt;/</code>；先从顶层 <code>make</code> 最后报告失败的包开始，查看该目录中的 <code>config.log</code>、<code>Makefile</code>、<code>*.stamp_*</code> 和具体编译命令。加 <code>V=1</code> 显示完整命令，有助于发现误用主机编译器、错误 sysroot、缺少头文件或链接次序问题。<code>make &lt;包名&gt;-show-depends</code> 可检查依赖，<code>make graph-depends</code> / <code>make graph-build</code> 可生成依赖/构建关系图（需按手册安装所需图形工具）。</p>
+<p>不要把 <code>make clean</code> 当作通用“修复按钮”：它会丢弃大量可复用输出，并导致重新下载/编译。若删包、改 toolchain 或状态不确定，干净重建是可靠验证手段，但应清楚成本；常规应用开发更适合使用 <code>BR2_EXTERNAL</code> 和包级 rebuild。修改 overlay 后再次执行顶层 <code>make</code> 通常即可反映更改；直接编辑 <code>output/target/</code> 仅适合临时试验，下一次清理会丢失，最终要把改动迁回 overlay、recipe 或配置。</p>
+<p>网络受限的团队可以先在联网环境运行 <code>make source</code> 下载当前配置所需源码，再把下载目录带到构建环境；构建前还要确认所有 Git 源引用固定到 commit/tag、归档有校验值、补丁被纳入版本控制。共享下载缓存 <code>BR2_DL_DIR</code> 能降低重复网络流量，但不能代替版本锁定或供应链审计。</p></div>
+      <div class="kb-section"><h2 id="rootfs-formats">17. 选择根文件系统格式：能启动和适合量产是两回事</h2>
+<p><code>output/images/</code> 里的不同文件作用不同：内核是处理器要执行的映像；rootfs 是用户态目录树打包后的文件系统；Bootloader 镜像是特定启动链的组件；SD 卡/Flash 的整盘镜像可能再把分区表、boot 分区、内核和 rootfs 组合起来。文件名相近不代表可互换。刷写前要核对板卡的启动介质、分区偏移、镜像格式和厂商烧录工具，不能将 QEMU 的 <code>rootfs.ext2</code> 直接写入任意开发板。</p>
+<p>常见文件系统输出可以这样理解：</p>
+<table class="kb-table">
+<thead>
+<tr>
+<th>格式</th>
+<th>常见用途</th>
+<th>需要提前考虑</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ext2</code>/<code>ext4</code></td>
+<td>QEMU 虚拟盘、SD/eMMC 上可读写 rootfs</td>
+<td>分区大小、掉电一致性、日志与磨损策略</td>
+</tr>
+<tr>
+<td><code>squashfs</code></td>
+<td>压缩、只读的固件 rootfs</td>
+<td>用户可变数据放哪里；是否需 overlayfs 或独立 data 分区</td>
+</tr>
+<tr>
+<td><code>tar</code></td>
+<td>归档/部署 rootfs 文件树</td>
+<td>不是完整的可启动磁盘映像，设备节点/权限还要按目标方式处理</td>
+</tr>
+<tr>
+<td><code>cpio</code></td>
+<td>initramfs/早期用户空间</td>
+<td>内核如何获取它，以及后续切换到真实 rootfs 的方式</td>
+</tr>
+</tbody>
+</table>
+<p>只读根文件系统并不会自动解决配置持久化：日志、网络配置、证书更新和用户数据要明确落到独立可写分区、tmpfs 或其他持久化介质。镜像类型、分区布局、内核 <code>root=</code>、initramfs 和 Bootloader 的启动参数必须作为一组设计，并在掉电/升级/空间不足等故障场景验证。</p></div>
+      <div class="kb-section"><h2 id="buildroot-vs-yocto">18. Buildroot 与 Yocto 怎么选：先看团队交付模型</h2>
+<p>“Buildroot 更小更简单、Yocto 只是更复杂”是过度概括。两者都能构建交叉工具链、内核和 rootfs；最终工作量取决于板厂 BSP、组件数量、产品维护年限和团队是否需要把系统拆成可复用的层。Buildroot 通过一个配置驱动较完整的产品构建，适合把明确的配置固化成一个最终镜像；Yocto/OpenEmbedded 通过 layer、recipe、class、distro 和 machine 元数据组织可复用的软件构建与发行版策略。两种方式都需要人来维护产品策略、升级和安全响应。</p>
+<table class="kb-table">
+<thead>
+<tr>
+<th>评估项</th>
+<th>Buildroot 常见做法</th>
+<th>Yocto/OpenEmbedded 常见做法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>入门路径</td>
+<td>defconfig + menuconfig + 一次完整镜像构建</td>
+<td>machine/distro/image 配置与多个 layer/recipe 解析</td>
+</tr>
+<tr>
+<td>产品定制</td>
+<td><code>BR2_EXTERNAL</code>、board 文件、package、overlay</td>
+<td>独立 layer、recipe、append、class、image/distro 配置</td>
+</tr>
+<tr>
+<td>多产品复用</td>
+<td>外部树和共享 package；产品配置之间仍需规划</td>
+<td>layer/recipe 元数据适合跨机型、发行版和团队复用</td>
+</tr>
+<tr>
+<td>软件升级模型</td>
+<td>常通过固定版本重新构建整套产品镜像</td>
+<td>可围绕 recipe/包 feed/SDK 设计更细的产品流程</td>
+</tr>
+<tr>
+<td>团队工程</td>
+<td>适合目标明确、配置集中、版本受控的镜像工程</td>
+<td>适合复杂 BSP、多产品变体、长期维护与标准化元数据流程</td>
+</tr>
+<tr>
+<td>成本</td>
+<td>配置和全量重建直观；产品规模扩大后要管理外部树与升级</td>
+<td>前期概念/基础设施更多；层和配方治理得当时复用更系统</td>
+</tr>
+</tbody>
+</table>
+<p>不要只按镜像大小选构建系统：通过裁剪依赖，两者都能生成精简 rootfs。先问：芯片厂是否提供哪个方案的 BSP？是否需要多个 SoC/板型共用应用？是否要维护多个产品发行版、SDK 和供应链清单？团队能否负责 recipe/layer 的持续升级？谁负责长期安全修复和回归测试？用同一块板、同一组软件、同一套更新需求做小规模验证，比单看菜单复杂度更可靠。</p>
+<p>一个可交付的 Buildroot 项目至少把下面这些输入纳入 Git，并在 CI 的干净 Linux 主机上构建：</p>
+<pre class="kb-code"><code class="language-text">Buildroot release/tag/commit + BR2_EXTERNAL commit
++ 产品 defconfig + 内核/BusyBox 配置 + board/ 文件
++ 本地 patch + 应用源码版本 + 下载校验/镜像策略
+→ make → legal-info / manifest → 镜像哈希 → QEMU 或板级测试记录
+</code></pre>
+<p>不要提交可重建的 <code>output/</code> 代替源码清单；也不要只保存一个开发者的 <code>.config</code>，却没有外部树、补丁、内核配置和工具链选择。发行前审阅 <code>make legal-info</code> 的警告与 package manifest，保存 <code>sha256sum output/images/*</code> 结果，并在 CI 中实际验证启动。Buildroot 能帮助组织组件来源和构建，不会自动提供安全 OTA、镜像签名、密钥托管、A/B 更新、回滚和漏洞响应流程；这些是产品架构的一部分，必须明确所有者与测试场景。</p>
+<p>参考：<a href="https://buildroot.org/downloads/manual/manual.html">Buildroot 官方手册</a>、<a href="https://buildroot.org/download.html">2025.02 LTS 下载信息与维护版本</a>、<a href="https://www.qemu.org/docs/master/system/linuxboot.html">QEMU direct Linux boot 说明</a>、<a href="https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt">QEMU 板级说明</a>、<a href="https://docs.yoctoproject.org/6.0.2/dev-manual/poky-manual-setup.html">Yocto 6.0.2 手动配置流程</a>。本文使用维护中的 2025.02.18 LTS 作为可复现示例；其他 release 的 defconfig 和软件版本可能不同。延伸阅读：<a href="https://mp.weixin.qq.com/s/nGNtRB45EYnPZSHch7_56g">PPSBBS 技术论坛原文</a>；本文重新组织和核对技术内容，不转载原文图表。</p></div>
+      <div class="kb-section"><h2 id="references">参考与下一篇</h2>
+<p><a href="/posts/yocto-from-zero/">下一篇：Yocto 从零构建</a> · <a href="/knowledge-base/">知识库首页</a></p></div>
     </div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <a href="/">yanruihe</a></div><div class="theme-info info-item">Buildroot · 嵌入式 Linux</div></div></footer></div>

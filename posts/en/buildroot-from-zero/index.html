@@ -6,53 +6,501 @@
   <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
     <div class="article-title"><span class="title-hover-animation">Embedded Linux from scratch: Buildroot</span></div><div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Buildroot</span></div><div class="kb-meta">2026-09-23 · Buildroot 2025.02.18 LTS · QEMU x86_64</div></div></div>
     <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>Build a toolchain, Linux kernel, and root filesystem from source, then boot the result in QEMU. Virtual firmware handles early boot here; a real ARM board still needs its own bootloader, device tree, drivers, and BSP.</p><p><a href="#why">How it works</a> · <a href="#host">Host</a> · <a href="#build">Build</a> · <a href="#boot">Boot</a> · <a href="#config">Configuration</a> · <a href="#troubleshoot">Troubleshooting</a> · <a href="#product">Product</a></p></div>
-      <div class="kb-section"><h2 id="why">First, why can Buildroot build a whole system?</h2><p>Buildroot does <strong>not reimplement Linux in C</strong>. It is primarily a framework of Makefiles, Kconfig configuration, scripts, and patches. The kernel, GCC, C library, and BusyBox are separate upstream projects. Buildroot selects versions and options, resolves package dependencies, fetches sources, cross-compiles components, installs them into a target filesystem, and produces the requested images. Thus <code>make</code> drives a configured build graph rather than one giant C program.</p><pre class="kb-code"><code>Board defconfig → .config → toolchain (binutils / GCC / C library, or external)
+      <div class="kb-lead"><p>Build a cross-toolchain, Linux kernel, and root filesystem from source, then boot and verify the result in QEMU. This example uses QEMU <code>-kernel</code> direct boot to test the kernel-to-userspace path; a real board's firmware and bootloader chain must be tested separately.</p><p><a href="#why">Why Buildroot</a> · <a href="#host">Host</a> · <a href="#build">First build</a> · <a href="#boot">QEMU test</a> · <a href="#architecture">Source tree</a> · <a href="#cross-compile">Cross-compiling</a> · <a href="#boot-chain">Boot chain</a> · <a href="#external-package">C package demo</a> · <a href="#init-systems">Init and services</a> · <a href="#incremental-build">Rebuilds</a> · <a href="#rootfs-formats">Rootfs formats</a> · <a href="#troubleshoot">Troubleshooting</a> · <a href="#product">Product delivery</a> · <a href="#buildroot-vs-yocto">Buildroot vs Yocto</a> · <a href="#references">References</a></p></div>
+      <div class="kb-section"><h2 id="why">First, why can Buildroot build a whole system?</h2>
+<p>Buildroot does <strong>not reimplement Linux in C</strong>. It is primarily a framework of Makefiles, Kconfig configuration, scripts, and patches. The kernel, GCC, C library, and BusyBox are separate upstream projects. Buildroot selects versions and options, resolves package dependencies, fetches sources, cross-compiles components, installs them into a target filesystem, and produces the requested images. Thus <code>make</code> drives a configured build graph rather than one giant C program.</p>
+<pre class="kb-code"><code class="language-text">Board defconfig → .config → toolchain (binutils / GCC / C library, or external)
                          → target packages (BusyBox and applications)
-                         → kernel / optional bootloader → root filesystem → images</code></pre><p>This is a <strong>responsibility map</strong>, not a strict task execution order. The <code>qemu_x86_64_defconfig</code> in this article builds a kernel and root filesystem while QEMU provides virtual BIOS firmware; <strong>this example does not build U-Boot</strong>. The C library is configurable rather than always musl. BusyBox supplies small userspace utilities and the default init, not the kernel or Buildroot itself.</p></div>
-      <div class="kb-section"><h2 id="host">1. Prepare the host</h2><p>Build on Linux as a normal user. On Windows, use a Linux VM or WSL2's Linux filesystem, not a Windows-mounted build directory. These commands target Ubuntu 24.04; consult the <a href="https://buildroot.org/downloads/manual/manual.html#requirement-mandatory">official host requirements</a> elsewhere. Allow ample disk, RAM, and network capacity.</p><pre class="kb-code"><code>sudo apt update
+                         → kernel / optional bootloader → root filesystem → images
+</code></pre>
+<p>This is a <strong>responsibility map</strong>, not a strict task execution order. The <code>qemu_x86_64_defconfig</code> in this article builds a kernel and root filesystem, and QEMU's <code>-kernel</code> option starts the kernel directly; <strong>this example does not build U-Boot or test firmware discovery of the kernel</strong>. The C library is configurable rather than always musl. BusyBox supplies small userspace utilities and the default init, not the kernel or Buildroot itself.</p></div>
+      <div class="kb-section"><h2 id="host">1. Prepare the host</h2>
+<p>Build as a normal user on Linux. Windows users can use a Linux VM or WSL2 on its Linux filesystem. The following is for Ubuntu 24.04; consult the <a href="https://buildroot.org/downloads/manual/manual.html#requirement-mandatory">Buildroot host requirements</a> for other distributions. Allow ample disk, memory, and network capacity.</p>
+<pre class="kb-code"><code class="language-bash">sudo apt update
 sudo apt install -y build-essential git wget cpio unzip rsync file bc \
-  bzip2 gzip xz-utils patch sed gawk qemu-system-x86</code></pre><p>Use sudo only for host package installation, never for <code>make</code>.</p></div>
-      <div class="kb-section"><h2 id="build">2. Pin and build the image</h2><pre class="kb-code"><code>git clone --branch 2025.02.18 --depth 1 https://gitlab.com/buildroot.org/buildroot.git buildroot
+  bzip2 gzip xz-utils patch sed gawk qemu-system-x86
+</code></pre>
+<p>Use sudo only to install host packages, never for <code>make</code>.</p></div>
+      <div class="kb-section"><h2 id="build">2. Pin a release and build</h2>
+<pre class="kb-code"><code class="language-bash">git clone --branch 2025.02.18 --depth 1 https://gitlab.com/buildroot.org/buildroot.git buildroot
 cd buildroot
 git describe --tags --always
 make qemu_x86_64_defconfig
 make
 ls -lh output/images/
 test -s output/images/bzImage
-test -s output/images/rootfs.ext2</code></pre><p>The initial build fetches sources and creates the toolchain, packages, kernel, and filesystem. Do not assume a top-level <code>make -j</code> is needed. Keep the artifacts distinct:</p><table class="kb-table"><thead><tr><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>.config</code></td><td>Full configuration; <code>make savedefconfig</code> extracts a smaller board configuration for version control</td></tr><tr><td><code>output/build/</code></td><td>Per-component extraction, configuration, and compilation</td></tr><tr><td><code>output/host/</code></td><td>Host tools, cross-toolchain, and target sysroot; <code>output/staging/</code> is a compatibility symlink to that sysroot</td></tr><tr><td><code>output/target/</code></td><td>Almost the target filesystem, but lacking proper device nodes and some permissions; <strong>do not deploy it</strong></td></tr><tr><td><code>output/images/</code></td><td>Kernel, root filesystem, and other final artifacts selected by the configuration</td></tr></tbody></table></div>
-      <div class="kb-section"><h2 id="boot">3. Boot QEMU and verify</h2><p>Follow the selected defconfig's <a href="https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt">board readme</a>:</p><pre class="kb-code"><code>qemu-system-x86_64 -M pc \
+test -s output/images/rootfs.ext2
+</code></pre>
+<p>The initial build downloads sources and builds the toolchain, target packages, kernel, and filesystem. Avoid assuming top-level <code>make -j</code> is needed. Keep the artifacts distinct:</p>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.config</code></td>
+<td>Full configuration; <code>make savedefconfig</code> extracts a smaller board configuration for version control</td>
+</tr>
+<tr>
+<td><code>output/build/</code></td>
+<td>Per-component extraction, configuration, and compilation</td>
+</tr>
+<tr>
+<td><code>output/host/</code></td>
+<td>Host tools, cross-toolchain, and target sysroot; <code>output/staging/</code> is a compatibility symlink to that sysroot</td>
+</tr>
+<tr>
+<td><code>output/target/</code></td>
+<td>Almost the target filesystem, but lacking proper device nodes and some permissions; <strong>do not deploy it</strong></td>
+</tr>
+<tr>
+<td><code>output/images/</code></td>
+<td>Kernel, root filesystem, and other final artifacts selected by the configuration</td>
+</tr>
+</tbody>
+</table></div>
+      <div class="kb-section"><h2 id="boot">3. Boot and inspect the system</h2>
+<p>Use the command from the selected board's <a href="https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt">QEMU readme</a>:</p>
+<pre class="kb-code"><code class="language-bash">qemu-system-x86_64 -M pc \
   -kernel output/images/bzImage \
   -drive file=output/images/rootfs.ext2,if=virtio,format=raw \
   -append 'rootwait root=/dev/vda console=tty1 console=ttyS0' \
-  -serial stdio -net nic,model=virtio -net user</code></pre><p>The login prompt appears in QEMU's graphical window. In the guest, inspect:</p><pre class="kb-code"><code>uname -a
+  -serial stdio -net nic,model=virtio -net user
+</code></pre>
+<p>The login prompt appears in the graphical QEMU window. Inside the guest, verify the kernel, root device, init, and root mount:</p>
+<pre class="kb-code"><code class="language-sh">uname -a
 cat /proc/cmdline
 cat /proc/1/comm
-mount | grep ' on / '</code></pre><p>Confirm the kernel, root device, init, and root mount, then shut down with <code>poweroff</code>. Do not hand-edit <code>rootfs.ext2</code> as persistent configuration.</p></div>
-      <div class="kb-section"><h2 id="custom">4. Add a boot-time action</h2><p>This minimal setup uses BusyBox init, not systemd. Run <code>mkdir -p board/demo/overlay/etc/init.d</code> and create <code>board/demo/overlay/etc/init.d/S99demo</code>:</p><pre class="kb-code"><code>#!/bin/sh
-case "$1" in
+mount | grep ' on / '
+</code></pre>
+<p>Shut down with <code>poweroff</code>. Do not hand-edit <code>output/images/rootfs.ext2</code> as a substitute for persistent configuration.</p></div>
+      <div class="kb-section"><h2 id="custom">4. Add a boot-time action</h2>
+<p>The minimal Buildroot configuration uses BusyBox init, not systemd. Run <code>mkdir -p board/demo/overlay/etc/init.d</code> and create <code>board/demo/overlay/etc/init.d/S99demo</code> with:</p>
+<pre class="kb-code"><code class="language-sh">#!/bin/sh
+case &quot;$1&quot; in
   start) echo 'Buildroot demo is ready' &gt;/dev/console ;;
   stop) ;;
   *) exit 1 ;;
-esac</code></pre><p>Run <code>chmod +x board/demo/overlay/etc/init.d/S99demo</code> and <code>make menuconfig</code>. Set <strong>System configuration → Root filesystem overlay directories</strong> to <code>board/demo/overlay</code>. Save, run <code>make</code>, and boot again. Look for the message and run <code>test -x /etc/init.d/S99demo</code> in the guest. Production applications should be Buildroot packages; the overlay is a minimal demo.</p></div>
-      <div class="kb-section"><h2 id="hardware">5. Preserve and port</h2><pre class="kb-code"><code>make savedefconfig BR2_DEFCONFIG=board/demo/demo_defconfig
-git status --short</code></pre><p>Commit the defconfig, overlay, patches, and pinned versions, not the entire <code>output/</code> tree. A config file alone does not guarantee a byte-for-byte reproducible build: pin Buildroot and external source versions, patches, toolchain, and host environment. For real hardware, select a matching board defconfig and verify CPU/ABI, bootloader, kernel configuration, device tree, partitions, serial console, and flashing procedure. A QEMU image is not directly flashable to an unrelated board. For build errors, inspect the failing package and <code>output/build/</code>; for boot errors, check kernel arguments, root device, and serial output. Buildroot does not automatically solve OTA, security updates, or product lifecycle management. Handle source and license obligations before shipping. For layered metadata and distribution policy, compare the <a href="/posts/en/yocto-from-zero/">Yocto from-zero guide</a>.</p></div>
-      <div class="kb-section"><h2 id="flow">6. Follow the build from configuration to image</h2><p>The menu records which components the target product needs. <code>make qemu_x86_64_defconfig</code> writes maintained defaults to <code>.config</code>; <code>make menuconfig</code> changes them; the top-level Makefile schedules package tasks by dependency. The toolchain supplies a target compiler, linker, and C library. User-space programs use it, while the kernel and bootloader are built from their own upstream source trees.</p><p>If a selected network application depends on OpenSSL, Buildroot first prepares the target headers and libraries, then cross-compiles the application. A package <code>.mk</code> describes its source, configuration, build, and installation; <code>Config.in</code> controls its menu entry. The rootfs skeleton, packages, overlay, device table, and permissions make up user space; a filesystem generator packages them in the selected format. Buildroot is the Makefile-driven integrator, while the components remain independent projects.</p><table class="kb-table"><thead><tr><th>Stage</th><th>Main inputs</th><th>Result</th></tr></thead><tbody><tr><td>Configuration</td><td>defconfig, menuconfig, board options</td><td><code>.config</code>, kernel and BusyBox configuration</td></tr><tr><td>Toolchain</td><td>CPU/ABI, C library, compiler version</td><td>Cross tools in <code>output/host/bin/</code></td></tr><tr><td>System components</td><td>Kernel, optional bootloader, BusyBox, packages</td><td>Files installed into staging/target</td></tr><tr><td>Image generation</td><td>skeleton, overlay, device table, filesystem type</td><td>Boot/flash artifacts in <code>output/images/</code></td></tr></tbody></table><p>Buildroot can build an internal toolchain or use an external cross-toolchain; the C library is a target choice. QEMU virtual firmware loads the kernel for this demo. A real board also needs a matching bootloader, DDR and boot-media initialization, device tree, and vendor BSP. Decide which parts Buildroot owns and which the vendor supplies.</p></div>
-      <div class="kb-section"><h2 id="config">7. Change configuration in small steps</h2><pre class="kb-code"><code>mkdir -p board/demo
+esac
+</code></pre>
+<p>Run <code>chmod +x board/demo/overlay/etc/init.d/S99demo</code>, then <code>make menuconfig</code>. Set <strong>System configuration → Root filesystem overlay directories</strong> to <code>board/demo/overlay</code>, save, run <code>make</code>, and boot again. Look for <code>Buildroot demo is ready</code> and check <code>test -x /etc/init.d/S99demo</code> in the guest. A production application belongs in a Buildroot package with startup integration for its chosen init system; an overlay is only a small demonstration here.</p></div>
+      <div class="kb-section"><h2 id="hardware">5. Preserve configuration and move to hardware</h2>
+<pre class="kb-code"><code class="language-bash">make savedefconfig BR2_DEFCONFIG=board/demo/demo_defconfig
+git status --short
+</code></pre>
+<p>Commit the defconfig, overlay, patches, and pinned versions, not the entire <code>output/</code> tree. A config file alone does not guarantee a byte-for-byte reproducible build: pin Buildroot and external source versions, patches, toolchain, and host environment. For real hardware, select a matching board defconfig and verify CPU/ABI, bootloader, kernel configuration, device tree, partitions, serial console, and flashing procedure. A QEMU image is not directly flashable to an unrelated board. For build errors, inspect the failing package and <code>output/build/</code>; for boot errors, check kernel arguments, root device, and serial output. Buildroot does not automatically solve OTA, security updates, or product lifecycle management. Handle source and license obligations before shipping. For layered metadata and distribution policy, compare the <a href="/posts/en/yocto-from-zero/">Yocto from-zero guide</a>.</p></div>
+      <div class="kb-section"><h2 id="flow">6. Follow the build from configuration to image</h2>
+<p>The menu is not a “compile all Linux source” switch. It records which parts the target product needs. <code>make qemu_x86_64_defconfig</code> writes a maintained set of choices into <code>.config</code>; <code>make menuconfig</code> changes those choices; the top-level Makefile then schedules package tasks according to their dependencies. The toolchain provides a target compiler, linker, and C library. User-space programs and libraries use that toolchain, while the kernel and bootloader are built from their own upstream source trees.</p>
+<p>For example, when a selected network application depends on OpenSSL, Buildroot adds that dependency to the graph, prepares its target headers and libraries, and then cross-compiles the application. Each package <code>.mk</code> file describes where its source comes from, how to configure and build it, and which files to install. <code>Config.in</code> controls its appearance in the configuration menu. The root filesystem skeleton, selected packages, overlay, device table, and permissions form the target user space; a filesystem generator then packages them as ext2, tar, squashfs, or another selected format. Buildroot is the Makefile-driven integrator; the components remain independent projects.</p>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Stage</th>
+<th>Main inputs</th>
+<th>Typical result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Configuration</td>
+<td>defconfig, menuconfig, board settings</td>
+<td><code>.config</code>, kernel and BusyBox configuration</td>
+</tr>
+<tr>
+<td>Toolchain</td>
+<td>CPU/ABI, C library, compiler version</td>
+<td>Cross tools under <code>output/host/bin/</code></td>
+</tr>
+<tr>
+<td>System components</td>
+<td>kernel, optional bootloader, BusyBox, packages</td>
+<td>Files installed into staging/target</td>
+</tr>
+<tr>
+<td>Image generation</td>
+<td>rootfs skeleton, overlay, device table, filesystem type</td>
+<td>Bootable or flashable files under <code>output/images/</code></td>
+</tr>
+</tbody>
+</table>
+<p>Buildroot can build its own toolchain or use an external cross-toolchain; the C library is a target choice. The QEMU example uses direct kernel boot, so it is useful for checking that the kernel and user space work together but does not test firmware or bootloader discovery. A real board usually needs a matching bootloader, DDR and boot-media initialization, device tree, and vendor BSP. Decide early which parts Buildroot owns and which parts come from the board vendor.</p></div>
+      <div class="kb-section"><h2 id="config">7. Change configuration in small steps</h2>
+<p>After the first build, save a baseline and change one option at a time:</p>
+<pre class="kb-code"><code class="language-bash">mkdir -p board/demo
 cp .config board/demo/qemu_x86_64_base.config
 make menuconfig
 diff -u board/demo/qemu_x86_64_base.config .config
 make
 make savedefconfig BR2_DEFCONFIG=board/demo/demo_defconfig
-diff -u configs/qemu_x86_64_defconfig board/demo/demo_defconfig</code></pre><p>Common menus cover <strong>Target options</strong> (architecture/ABI), <strong>Toolchain</strong> (C library/compiler), <strong>System configuration</strong> (hostname, password policy, init and device management), <strong>Target packages</strong>, <strong>Kernel</strong>, and <strong>Filesystem images</strong>. Choose from the board and application requirements: every extra package adds image size, dependencies, and maintenance/security work.</p><p>Linux, BusyBox, and the C library each have their own configurator:</p><pre class="kb-code"><code>make linux-menuconfig
+diff -u configs/qemu_x86_64_defconfig board/demo/demo_defconfig
+</code></pre>
+<p>Common menus include <strong>Target options</strong> (architecture and ABI), <strong>Toolchain</strong> (C library and compiler), <strong>System configuration</strong> (hostname, password policy, init and device management), <strong>Target packages</strong>, <strong>Kernel</strong>, and <strong>Filesystem images</strong>. Start from the board and application requirements. Every extra package adds image size, dependencies, and maintenance or security work.</p>
+<p>Linux, BusyBox, and the C library each have their own configuration. Their options are not Buildroot package options. Open the relevant configurator with:</p>
+<pre class="kb-code"><code class="language-bash">make linux-menuconfig
 make busybox-menuconfig
-make uclibc-menuconfig   # only when using uClibc-ng</code></pre><p>Save a kernel configuration with <code>make linux-update-defconfig</code>; BusyBox has <code>busybox-update-config</code>. Available targets vary with the configuration, so consult <code>make help</code> and the pinned manual. Commit the compact defconfig, kernel/BusyBox configuration, patches, and overlay together. Do not commit only a workstation-specific <code>.config</code> or absolute paths. After changing a package, inspect dependencies and rebuild it:</p><pre class="kb-code"><code>make openssl-show-depends
+make uclibc-menuconfig   # only when using uClibc-ng
+</code></pre>
+<p>Save a kernel configuration with <code>make linux-update-defconfig</code>; BusyBox has a corresponding <code>busybox-update-config</code> target. Available targets depend on the configuration, so check <code>make help</code> or the manual for the pinned release. Commit the compact defconfig, kernel/BusyBox configuration, patches, and overlay together. Do not commit only a machine-specific <code>.config</code> or absolute paths from one developer's workstation.</p>
+<p>After changing a package, rebuild its target before discarding the whole output directory:</p>
+<pre class="kb-code"><code class="language-bash">make openssl-show-depends
 make openssl-rebuild
-make V=1</code></pre><p>Replace the example package name with the actual target. <code>V=1</code> prints full commands to inspect flags, include paths, and libraries. A configuration or dependency change may require the package's reconfigure/dirclean target before the top-level build refreshes dependents.</p></div>
-      <div class="kb-section"><h2 id="service">8. Add files, applications, and services</h2><p>A rootfs overlay suits a small number of defaults, static files, or startup scripts. Its directory layout mirrors the target root: <code>board/demo/overlay/etc/...</code> becomes <code>/etc/...</code> in the guest. This guide's <code>S99demo</code> uses BusyBox init. Buildroot's init is configurable; when using systemd, provide systemd units and package integration instead of treating a BusyBox <code>/etc/init.d/</code> script as a universal service definition.</p><p>An overlay is not a package manager. A production application should be a Buildroot package so its source version, dependencies, build flags, install paths, and license metadata can be reviewed and rebuilt. A custom package normally has <code>Config.in</code> and <code>.mk</code> files: the former defines its Kconfig option/dependencies, and the latter describes source retrieval, cross-compilation, and installation. Put them in a <code>BR2_EXTERNAL</code> tree and version that tree with the product defconfig instead of patching upstream Buildroot. For multiple distribution policies and broader metadata reuse, see the <a href="/posts/en/yocto-from-zero/">Yocto guide</a>.</p></div>
-      <div class="kb-section"><h2 id="troubleshoot">9. Separate build errors from boot errors</h2><table class="kb-table"><thead><tr><th>Symptom</th><th>Check first</th><th>Next step</th></tr></thead><tbody><tr><td>Download failure</td><td><code>output/build/&lt;package&gt;/</code>, <code>dl/</code>, final error</td><td>Check network/proxy, upstream URL, and checksum; distinguish fetch from compile errors</td></tr><tr><td>Missing header or library</td><td>Failing package's <code>config.log</code> and dependencies</td><td>Confirm dependency selection and distinguish host/target packages</td></tr><tr><td>Host architecture in link command</td><td>Compiler command, <code>output/host/bin/</code></td><td>Target packages must use Buildroot's cross-toolchain</td></tr><tr><td>QEMU cannot find rootfs</td><td>Arguments, generated filename, <code>/proc/cmdline</code></td><td>Check virtio root device and generated image format</td></tr><tr><td>Kernel starts without login prompt</td><td><code>console=</code>, getty, QEMU terminal/window</td><td>Use the board readme for the selected defconfig</td></tr><tr><td>Overlay file is absent</td><td>Overlay path in <code>.config</code>, file permissions</td><td>Save the overlay setting and check executable mode</td></tr></tbody></table><p>Build logs usually identify the failed package. Fix its dependency, toolchain setting, or patch, then rebuild affected packages; clean the full output only when you have confirmed it is corrupted. On a restricted network, run <code>make source</code> to fetch the sources selected by the configuration and move the download directory to the build host.</p></div>
-      <div class="kb-section"><h2 id="product">10. From QEMU demo to product</h2><p>QEMU validates that a configuration boots. It does not validate a real board's DDR, boot media, GPIO, display, wireless, power management, or factory flashing. Obtain the vendor BSP and supported versions, then confirm the SoC/ABI, boot stages, kernel defconfig, device tree, root partition, partition table, console, and update/rollback plan. Boot a minimal image first, then add drivers and applications in batches while saving images and serial logs.</p><pre class="kb-code"><code>make legal-info</code></pre><p>Review warnings, package manifests, and license texts in <code>output/legal-info/README</code>; this is supporting material, not a substitute for license review. Version the pinned Buildroot revision, defconfig, external tree, patches, board files, application revisions, and build instructions. A clean Linux CI host should rebuild and archive image hashes. Field updates need separate signature checks, A/B or recovery partitions, rollback, key management, and security-update policy.</p></div>
-      <div class="kb-section"><h2>References and next article</h2><p><a href="https://buildroot.org/downloads/manual/manual.html">Buildroot manual</a> · <a href="https://buildroot.org/download.html">LTS releases</a> · <a href="https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt">QEMU board readme</a> · <a href="https://mp.weixin.qq.com/s/nGNtRB45EYnPZSHch7_56g">Original PPSBBS article</a> (this guide independently organizes and checks the technical material without reproducing its figures) · <a href="/posts/en/yocto-from-zero/">Next: Yocto from scratch</a> · <a href="/knowledge-base/en/">Knowledge Base</a></p></div>
+make V=1
+</code></pre>
+<p>This example assumes OpenSSL is selected. <code>V=1</code> prints fuller commands, which helps reveal compiler flags, include paths, and link libraries. If the change affects configuration or dependencies, a rebuild alone may not be enough; use the package's reconfigure or dirclean target as appropriate, then let the top-level build refresh dependent packages.</p></div>
+      <div class="kb-section"><h2 id="service">8. Add your own files and services</h2>
+<p>A root filesystem overlay is useful for a small number of defaults, static files, or startup scripts. Its directory layout mirrors the target root: <code>board/demo/overlay/etc/...</code> becomes <code>/etc/...</code> in the guest. The <code>S99demo</code> script in this guide uses BusyBox init. Buildroot's init system is configurable; if you select systemd, use systemd unit files and package integration instead of treating a BusyBox <code>/etc/init.d/</code> script as a universal service definition.</p>
+<p>An overlay is not a substitute for a software package. A production application should be a Buildroot package so its source version, dependencies, build flags, install paths, and license metadata can be reviewed and rebuilt. A custom package normally has a <code>Config.in</code> and a <code>.mk</code> file: the first defines its Kconfig option and dependencies; the second describes source retrieval, cross-compilation, installation, and license information. Put these files in a <code>BR2_EXTERNAL</code> tree rather than patching the upstream Buildroot tree directly, and version the external tree and product defconfig together. If your product needs multiple distributions, extensive metadata reuse, or a larger software-layer workflow, compare the <a href="/posts/en/yocto-from-zero/">Yocto from-zero guide</a>.</p></div>
+      <div class="kb-section"><h2 id="troubleshoot">9. Separate build failures from boot failures</h2>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Inspect first</th>
+<th>Likely cause or next step</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Failure during download</td>
+<td><code>output/build/&lt;package&gt;/</code>, <code>dl/</code>, final error lines</td>
+<td>Network/proxy, upstream URL change, or checksum mismatch; identify whether fetch or compilation failed</td>
+</tr>
+<tr>
+<td>Missing header or library</td>
+<td>Failing package's <code>config.log</code>, <code>output/host/</code>, dependency menu</td>
+<td>Dependency not selected, stale configure state, or confusion between host and target packages</td>
+</tr>
+<tr>
+<td>Host architecture appears in a link command</td>
+<td>Compiler command and <code>output/host/bin/</code></td>
+<td>Host <code>gcc</code> was used; target packages must use Buildroot's cross-toolchain</td>
+</tr>
+<tr>
+<td>QEMU cannot find the root filesystem</td>
+<td>QEMU arguments, image filename, guest <code>/proc/cmdline</code></td>
+<td>Root device does not match <code>if=virtio</code>, or the generated format/name differs</td>
+</tr>
+<tr>
+<td>Kernel starts but there is no login prompt</td>
+<td><code>console=</code> arguments, getty configuration, QEMU terminal/window</td>
+<td>Console mismatch; start with the board readme for the selected defconfig</td>
+</tr>
+<tr>
+<td>Overlay file is absent in the image</td>
+<td>Overlay path in <code>.config</code>, file mode, directory layout</td>
+<td>Overlay option not saved, wrong relative path, or startup script is not executable</td>
+</tr>
+</tbody>
+</table>
+<p>Build logs usually identify the package that actually failed. Fix its dependency, toolchain choice, or patch, then rebuild the affected package. Reserve a full clean build for a confirmed corrupted state: it repeats compilation and downloads. On a restricted network, run <code>make source</code> to fetch sources selected by the current configuration, then move the download directory to the build host.</p></div>
+      <div class="kb-section"><h2 id="product">10. Move from the QEMU demo to a product</h2>
+<p>QEMU checks that the selected configuration boots. It does not validate board DDR setup, boot media, GPIO, display, wireless, power management, or factory flashing. For a development board, obtain the vendor BSP and supported versions first. Confirm the SoC/ABI, boot stages, kernel defconfig, device tree, root partition, partition table, serial console, and update/rollback design. Boot a minimal image, then add drivers and applications in batches while saving reproducible images and serial logs at each step.</p>
+<p>Generate and review the software inventory and license material before release:</p>
+<pre class="kb-code"><code class="language-bash">make legal-info
+</code></pre>
+<p>Review warnings, package manifests, and license texts in <code>output/legal-info/README</code>. This collects useful material, but it does not replace license-by-license review. At minimum, version the pinned Buildroot revision, defconfig, external tree, patches, board files, application source revisions, and build instructions. A clean Linux CI host should build the configuration and archive the resulting image hashes. Field updates also need separately designed signature checks, A/B or recovery partitions, rollback, key management, and security-update policy; one <code>make</code> does not provide them.</p></div>
+      <div class="kb-section"><h2 id="architecture">11. Inside the Buildroot tree: Makefiles, Kconfig, and packages</h2>
+<p>Buildroot can look like a large C project, which may suggest that <code>make</code> compiles Buildroot itself into Linux. More precisely, it is a <strong>build orchestrator</strong>: the top-level Makefile reads <code>.config</code> and invokes rules for the toolchain, packages, kernel, bootloader, and filesystem images. Most target software comes from upstream projects. Buildroot maintains version choices, configuration fragments, patches, and the instructions for building and installing each component.</p>
+<pre class="kb-code"><code class="language-text">Buildroot source tree
+├── Makefile / Config.in       top-level entry and configuration system
+├── arch/                      CPU architectures, ABI, architecture defaults
+├── toolchain/                 GCC, binutils, kernel headers, C libraries
+├── package/&lt;name&gt;/            userspace package config, build rules, patches
+├── linux/, boot/              Linux kernel and bootloader rules
+├── system/                    rootfs skeleton, init, system configuration
+├── fs/                        ext2, tar, squashfs, and image-generation rules
+├── board/&lt;vendor&gt;/&lt;board&gt;/    board defconfig, kernel config, overlay, scripts
+└── configs/                   ready-to-load defconfigs
+</code></pre>
+<p>A typical package directory contains <code>Config.in</code> and <code>&lt;package&gt;.mk</code>. The former registers a <code>BR2_PACKAGE_*</code> option and its dependencies with Kconfig; the latter describes the source version/location, dependencies, build method, target installation, and license metadata. Upstream fixes may live in <code>*.patch</code>; downloads can be checked with a <code>.hash</code> file. If a package does not appear in menuconfig, the external tree may not be loaded, a Kconfig dependency may be unmet, or the package may not support the selected architecture/toolchain. It is not necessarily a Makefile bug.</p>
+<p>The top-level build prepares host tools and the cross-toolchain, builds target libraries and applications according to their dependencies, optionally builds the kernel and bootloader, and finally assembles the root filesystem and images. The dependency graph determines the actual order; independent packages can build in parallel. Package sources, build workspaces, and stamp files are normally under <code>output/build/</code>. This also explains why changing a setting does not necessarily force every already-built package to rebuild: Buildroot is designed to integrate product images, not to act as a general package manager on the target device.</p>
+<p>Separating source from output keeps personal settings and large build artifacts out of the upstream tree:</p>
+<pre class="kb-code"><code class="language-bash"># Run from the Buildroot source root; an absolute O= path is recommended.
+make O=&quot;$PWD/out-qemu&quot; qemu_x86_64_defconfig
+make O=&quot;$PWD/out-qemu&quot; menuconfig
+make O=&quot;$PWD/out-qemu&quot;
+</code></pre>
+<p>The configuration is then in <code>out-qemu/.config</code>. Save a compact product configuration with <code>make O=&quot;$PWD/out-qemu&quot; savedefconfig BR2_DEFCONFIG=&quot;$PWD/board/demo/demo_defconfig&quot;</code>. Do not run two builds that modify the same output directory concurrently. To test several configurations in parallel, give each one its own <code>O=</code> directory.</p></div>
+      <div class="kb-section"><h2 id="cross-compile">12. Cross-compilation: target tuple, ABI, and C library</h2>
+<p>Running <code>gcc hello.c -o hello</code> on a development machine normally produces a program that runs on that machine. An embedded product has two different sides: the build runs on an x86_64 Linux host, while the result may run on an ARM64 board. A cross-compiler emits instructions for the target architecture and follows its ABI, floating-point calling convention, C library, and headers.</p>
+<pre class="kb-code"><code class="language-text">Build machine: runs make and Buildroot on Linux
+Target:        processor, ABI, C library, and interfaces where the program runs
+Toolchain:     runs on the build machine but emits executables for the target
+</code></pre>
+<p>The name <code>output/host/</code> is easy to misread. It contains tools that <strong>run on the build host</strong>, including the cross-compiler, helper tools, and target sysroot. <code>output/staging/</code> is normally a compatibility entry to that sysroot, where packages find target headers and libraries while compiling. <code>output/target/</code> is the target rootfs staging tree. The final files for booting or flashing come from <code>output/images/</code>; these directories are not interchangeable.</p>
+<p>Buildroot can create an internal toolchain or use an external one. The internal option is tightly integrated, but changing GCC, the C library, or a fundamental toolchain option often requires rebuilding the whole system. An external toolchain is useful when a chip vendor provides a fixed SDK or the organization already validates one. Check that its architecture, ABI, C library, thread/C++ support, and other capabilities match the Buildroot configuration. The host distribution's <code>/usr/bin/gcc</code> is not an ARM toolchain.</p>
+<p>The C library implements most libc APIs used by applications and mediates their system-call interface to the Linux kernel. Buildroot can select glibc, musl, or uClibc-ng depending on version and target. They differ in size, compatibility, features, and application support. Switching libraries or changing their configuration is not a cosmetic edit: the dynamic loader, symbol versions, and ABI of existing binaries may change, so a full rebuild is usually required. Kernel headers also participate in toolchain construction; the selected headers must not advertise interfaces newer than those provided by the kernel that will run on the device.</p>
+<p>When an application builds but will not run on the board, check its architecture/ABI and dynamic dependencies before rebuilding the kernel:</p>
+<pre class="kb-code"><code class="language-bash">file output/target/usr/bin/hello-demo
+readelf -h output/target/usr/bin/hello-demo
+readelf -l output/target/usr/bin/hello-demo | grep interpreter
+</code></pre>
+<p><code>file</code> and <code>readelf</code> inspect the ELF architecture and dynamic-loader path. Host <code>ldd</code> cannot validate a binary for a different architecture. Application teams that build outside Buildroot can export an SDK with <code>make sdk</code>; document the corresponding Buildroot configuration, toolchain, and sysroot. An SDK is not a target-side package manager and does not replace image version management.</p></div>
+      <div class="kb-section"><h2 id="boot-chain">13. From power-on to PID 1: what is in an image?</h2>
+<p>“Embedded Linux image” is often used as if it were one file, but it helps to separate firmware/bootloader, kernel, root filesystem, and boot arguments. The exact startup stages depend on the hardware. Buildroot can build some of them when configured, but one <code>make</code> cannot infer a vendor board's DDR setup, clocks, or flash layout.</p>
+<pre class="kb-code"><code class="language-text">Common physical-board startup (illustrative; SoC-dependent)
+Boot ROM → optional SPL/TPL → U-Boot or another bootloader
+         → Linux kernel + DTB + optional initramfs
+         → mount rootfs → start PID 1 (init) → services / login
+
+This guide's QEMU startup
+QEMU -kernel bzImage → direct Linux kernel boot
+                    → rootfs.ext2 on virtio disk (root=/dev/vda)
+                    → init → userspace
+</code></pre>
+<p>The QEMU argument <code>-kernel output/images/bzImage</code> uses direct-kernel boot: QEMU starts the supplied kernel, <code>-append</code> passes its command line, and <code>-drive ... if=virtio</code> supplies a virtual disk. This checks that the kernel detects the virtio root disk, mounts ext2, finds init, and starts userspace. It does not test BIOS/UEFI device discovery, U-Boot environment variables or scripts, TFTP/SPI/eMMC boot, DTB handoff, or real-board power sequencing. To test those stages, choose a QEMU machine and boot mode that model them, or use the target board's serial console and vendor boot procedure.</p>
+<p>After mounting rootfs, the kernel normally starts <code>/sbin/init</code> (or another program specified on the kernel command line). PID 1 mounts required virtual filesystems, manages devices, starts services, and provides login. Buildroot defaults to BusyBox init. A minimal userspace still needs more than an app binary: include the correct dynamic loader, shared libraries, configuration, device permissions, DNS/time-zone/certificate files, and whatever else the product requires.</p>
+<p>Device management is another easily missed connection. Kernel <code>devtmpfs</code> creates basic device nodes. A simple system can start with that alone; add mdev/eudev when hotplug events or firmware loading require it. With systemd, device handling uses the systemd/udev path. Kernel options, Buildroot's <code>/dev</code> management setting, and userspace services must agree. Seeing <code>/dev/console</code> does not prove that an I2C bus, network interface, or custom driver works.</p></div>
+      <div class="kb-section"><h2 id="external-package">14. Add a C program from an empty external tree: BR2_EXTERNAL</h2>
+<p>Copying a binary into <code>output/target/</code> is a one-off experiment: it disappears after a clean build and does not document its source, dependencies, or license. Product code belongs in a Buildroot package. Keep project-specific files in a separate <code>BR2_EXTERNAL</code> tree so the upstream Buildroot checkout remains clean while packages, board files, and defconfigs can be reviewed and versioned together.</p>
+<p>Start with sibling source directories:</p>
+<pre class="kb-code"><code class="language-text">workspace/
+├── buildroot/                 # pinned to 2025.02.18
+└── br2-external/
+    ├── external.desc
+    ├── Config.in
+    ├── external.mk
+    └── package/hello-demo/
+        ├── Config.in
+        ├── hello-demo.mk
+        ├── S99hello-demo
+        ├── hello-demo.service
+        └── src/
+            ├── main.c
+            └── LICENSE
+</code></pre>
+<p>An external tree needs a descriptor plus Kconfig and Makefile entry points. <code>name: DEMO</code> in <code>external.desc</code> creates <code>BR2_EXTERNAL_DEMO_PATH</code>, available to configuration and package recipes:</p>
+<pre class="kb-code"><code class="language-text">name: DEMO
+desc: Demo product packages
+</code></pre>
+<pre class="kb-code"><code class="language-make"># br2-external/Config.in
+source &quot;$BR2_EXTERNAL_DEMO_PATH/package/hello-demo/Config.in&quot;
+</code></pre>
+<pre class="kb-code"><code class="language-make"># br2-external/external.mk
+include $(sort $(wildcard $(BR2_EXTERNAL_DEMO_PATH)/package/*/*.mk))
+</code></pre>
+<p>The package's <code>Config.in</code> adds a menu option. Its recipe uses Buildroot's <code>generic-package</code> infrastructure to handle local sources, dependencies, build steps, and installation.</p>
+<pre class="kb-code"><code class="language-kconfig"># br2-external/package/hello-demo/Config.in
+config BR2_PACKAGE_HELLO_DEMO
+    bool &quot;hello-demo&quot;
+    help
+      A small C example built with the target toolchain.
+</code></pre>
+<pre class="kb-code"><code class="language-c">/* br2-external/package/hello-demo/src/main.c */
+#include &lt;stdio.h&gt;
+
+int main(void)
+{
+    puts(&quot;Hello from a Buildroot target!&quot;);
+    return 0;
+}
+</code></pre>
+<p>The recipe shows the essential data flow: <code>$(TARGET_CC)</code> is the target cross-compiler; <code>$(@D)</code> is the package's prepared source directory; only the runtime executable is installed into <code>$(TARGET_DIR)</code>. The uppercase prefix in <code>.mk</code> must correspond to the package name. Put the standard MIT license text in <code>src/LICENSE</code>, then replace the example copyright and license with the real project's metadata. Never invent a license merely to silence <code>legal-info</code>.</p>
+<pre class="kb-code"><code class="language-make"># br2-external/package/hello-demo/hello-demo.mk
+HELLO_DEMO_VERSION = 1.0
+HELLO_DEMO_SITE = $(HELLO_DEMO_PKGDIR)/src
+HELLO_DEMO_SITE_METHOD = local
+HELLO_DEMO_LICENSE = MIT
+HELLO_DEMO_LICENSE_FILES = LICENSE
+
+define HELLO_DEMO_BUILD_CMDS
+    $(TARGET_CC) $(TARGET_CFLAGS) $(TARGET_LDFLAGS) \
+        -o $(@D)/hello-demo $(@D)/main.c
+endef
+
+define HELLO_DEMO_INSTALL_TARGET_CMDS
+    $(INSTALL) -D -m 0755 $(@D)/hello-demo \
+        $(TARGET_DIR)/usr/bin/hello-demo
+endef
+
+define HELLO_DEMO_INSTALL_INIT_SYSV
+    $(INSTALL) -D -m 0755 $(HELLO_DEMO_PKGDIR)/S99hello-demo \
+        $(TARGET_DIR)/etc/init.d/S99hello-demo
+endef
+
+define HELLO_DEMO_INSTALL_INIT_SYSTEMD
+    $(INSTALL) -D -m 0644 $(HELLO_DEMO_PKGDIR)/hello-demo.service \
+        $(TARGET_DIR)/usr/lib/systemd/system/hello-demo.service
+endef
+
+$(eval $(generic-package))
+</code></pre>
+<p>Buildroot calls the matching <code>HELLO_DEMO_INSTALL_INIT_*</code> hook for the selected init system. The BusyBox/SysV example runs once at boot and sends output to the console:</p>
+<pre class="kb-code"><code class="language-sh">#!/bin/sh
+# br2-external/package/hello-demo/S99hello-demo
+case &quot;$1&quot; in
+  start) /usr/bin/hello-demo &gt;/dev/console 2&gt;&amp;1 ;;
+  stop) ;;
+  restart) &quot;$0&quot; stop; &quot;$0&quot; start ;;
+  *) echo &quot;Usage: $0 {start|stop|restart}&quot; &gt;&amp;2; exit 1 ;;
+esac
+</code></pre>
+<p>The systemd unit can be:</p>
+<pre class="kb-code"><code class="language-ini"># br2-external/package/hello-demo/hello-demo.service
+[Unit]
+Description=Buildroot hello demo
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/hello-demo
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+<p>Load the external tree from the Buildroot source root, enable the package, and build it:</p>
+<pre class="kb-code"><code class="language-bash">make BR2_EXTERNAL=../br2-external qemu_x86_64_defconfig
+make BR2_EXTERNAL=../br2-external menuconfig
+# Enable hello-demo in Target packages / external options, then save and exit.
+make BR2_EXTERNAL=../br2-external hello-demo
+make BR2_EXTERNAL=../br2-external
+</code></pre>
+<p>Relative <code>BR2_EXTERNAL</code> paths are interpreted from the Buildroot source root; production scripts should use an absolute path or compute it in a project Makefile. <code>make hello-demo</code> builds that package but does not itself recreate the final rootfs, so run the top-level <code>make</code> afterward. Boot QEMU and run <code>hello-demo</code>. If you installed startup integration too, verify it according to the chosen init using <code>cat /proc/1/comm</code>, <code>systemctl status hello-demo.service</code>, or the boot console. After editing the app source, <code>make hello-demo-rebuild all</code> recompiles the package and recreates the image.</p>
+<p>This minimal example intentionally calls <code>$(TARGET_CC)</code> directly. Real packages should use Buildroot's autotools, CMake, Meson, or other matching package infrastructure. Declare dependencies in <code>.mk</code>, and distinguish tools that run on the build host from libraries used by target programs. If another target package needs your headers, install them to <code>STAGING_DIR</code> as well as installing runtime files to <code>TARGET_DIR</code>.</p></div>
+      <div class="kb-section"><h2 id="init-systems">15. BusyBox init and systemd: one package, different startup methods</h2>
+<p>Init is the first userspace process started by the kernel, and its PID must be 1. Buildroot defaults to BusyBox init. It reads Buildroot's <code>/etc/inittab</code>, runs <code>/etc/init.d/rcS</code>, then invokes <code>SNNname start</code> scripts in name order and starts getty according to configuration. The <code>NN</code> value communicates relative startup order; a daemon that requires networking should not start before the network setup script.</p>
+<pre class="kb-code"><code class="language-text">Kernel mounts root filesystem
+  → /sbin/init (BusyBox init, PID 1)
+  → /etc/inittab
+  → /etc/init.d/rcS
+  → S01... → S40network → S50... → getty/login
+</code></pre>
+<p>The previous section's script demonstrates a one-shot startup action, not a robust daemon manager. A real background service needs correct start/stop behavior, duplicate-start protection, PID handling, return codes, and logging. Buildroot's guidance is for daemon packages to provide a conforming SysV/BusyBox script, commonly using <code>start-stop-daemon</code> for a foreground process, and a systemd unit where appropriate. Keep the executable, config, runtime user, permissions, startup files, and license metadata together in the package instead of scattering them across overlays.</p>
+<p>Switching to systemd changes PID 1, device management, service dependencies, and logging tools, and brings dependencies such as D-Bus and udev; the image is no longer the minimal BusyBox combination. <code>System configuration → Init system</code> selects the init system, and the package hooks install only the matching startup files. Do not verify only that a unit file exists: check <code>cat /proc/1/comm</code>, <code>systemctl is-enabled hello-demo.service</code>, <code>systemctl is-active hello-demo.service</code>, and <code>journalctl -u hello-demo.service -b</code>. If the product does not need systemd's service dependency or device-management features, the default BusyBox init is often lighter. If it needs D-Bus, complex service orchestration, or udev, evaluate systemd's size, startup behavior, and maintenance costs.</p></div>
+      <div class="kb-section"><h2 id="incremental-build">16. Incremental builds do not know every dependency: cache and rebuild boundaries</h2>
+<p>Buildroot tracks package build stages, but it does not maintain a package-manager-style reverse map of every installed file and every package affected by a change. Use the narrowest rebuild that is actually safe:</p>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Change</th>
+<th>Typical action</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Overlay, post-build, or post-image script content</td>
+<td>Run top-level <code>make</code> again</td>
+<td>These inputs are processed while assembling the rootfs/images</td>
+</tr>
+<tr>
+<td>Application source only, build rules unchanged</td>
+<td><code>make hello-demo-rebuild all</code></td>
+<td>Rebuild the package and then assemble the image</td>
+</tr>
+<tr>
+<td>Package configure option or dependency changed</td>
+<td><code>make hello-demo-reconfigure all</code>, or <code>dirclean</code> if needed</td>
+<td>Re-run configure; consumers may also need rebuilding</td>
+</tr>
+<tr>
+<td>Remove an installed package from the image</td>
+<td>Usually clean and rebuild</td>
+<td>Buildroot does not keep a reverse list for deleting each package's installed files</td>
+</tr>
+<tr>
+<td>Toolchain, C library, or architecture ABI changed</td>
+<td>Consider a full rebuild</td>
+<td>Compiler, headers, loader, and library ABI affect target programs broadly</td>
+</tr>
+</tbody>
+</table>
+<p>Package download/configure/build logs are usually under <code>output/build/&lt;package&gt;-&lt;version&gt;/</code>. Start with the package named in the final error from top-level <code>make</code>; inspect <code>config.log</code>, build files, <code>*.stamp_*</code>, and the failing command. Add <code>V=1</code> to show full commands and identify host-compiler leakage, a wrong sysroot, missing headers, or link-order problems. <code>make &lt;package&gt;-show-depends</code> inspects dependencies; <code>make graph-depends</code> and <code>make graph-build</code> can generate dependency/build graphs (install the graph tools required by the manual).</p>
+<p>Do not use <code>make clean</code> as a universal repair button: it discards reusable output and may cause downloads and compilation to repeat. A clean rebuild is a reliable check after removing packages, changing the toolchain, or when state is uncertain, but understand its cost. Normal application development is better served by <code>BR2_EXTERNAL</code> and package-level rebuilds. Re-running top-level <code>make</code> after changing an overlay usually incorporates it; editing <code>output/target/</code> directly is only a temporary experiment and will be lost on cleanup. Move validated changes into an overlay, recipe, or configuration.</p>
+<p>For restricted networks, run <code>make source</code> in a connected environment to fetch sources selected by the configuration, then move the download directory to the build host. Before release, pin Git sources to commits/tags, verify archive hashes, and version patches. A shared <code>BR2_DL_DIR</code> reduces repeated downloads but does not replace version pinning or supply-chain review.</p></div>
+      <div class="kb-section"><h2 id="rootfs-formats">17. Choose a root filesystem format: bootable is not the same as production-ready</h2>
+<p>Files under <code>output/images/</code> serve different purposes. The kernel image contains code for the processor; a rootfs image packages the userspace tree; a bootloader image is one component of a specific startup chain; a whole-disk SD/flash image may combine a partition table, boot partition, kernel, and rootfs. Similar filenames do not make these artifacts interchangeable. Before flashing, verify the board's boot media, partition offsets, image format, and vendor flashing utility. Never write the QEMU <code>rootfs.ext2</code> to an unrelated board.</p>
+<p>Common filesystem outputs have different tradeoffs:</p>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Format</th>
+<th>Typical use</th>
+<th>Questions to answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ext2</code>/<code>ext4</code></td>
+<td>QEMU virtual disk or writable SD/eMMC rootfs</td>
+<td>Partition size, power-loss consistency, logging, and flash wear</td>
+</tr>
+<tr>
+<td><code>squashfs</code></td>
+<td>Compressed, read-only firmware rootfs</td>
+<td>Where mutable data lives; whether overlayfs or a separate data partition is needed</td>
+</tr>
+<tr>
+<td><code>tar</code></td>
+<td>Rootfs file-tree archive/deployment</td>
+<td>Not a bootable disk image; device nodes and permissions depend on deployment method</td>
+</tr>
+<tr>
+<td><code>cpio</code></td>
+<td>initramfs/early userspace</td>
+<td>How the kernel receives it and whether/how the system pivots to a real rootfs</td>
+</tr>
+</tbody>
+</table>
+<p>A read-only root filesystem does not solve persistence by itself. Logs, network settings, certificate updates, and user data need a deliberate location on a writable partition, tmpfs, or another persistent medium. Filesystem type, partition layout, kernel <code>root=</code>, initramfs, and bootloader arguments are one design and should be tested under power loss, updates, and low-storage conditions.</p></div>
+      <div class="kb-section"><h2 id="buildroot-vs-yocto">18. Buildroot or Yocto? Choose by the delivery model</h2>
+<p>“Buildroot is smaller and simpler; Yocto is just more complex” is an oversimplification. Both can build a cross-toolchain, kernel, and rootfs. Real effort depends on the vendor BSP, component count, product lifetime, and whether teams need reusable layers. Buildroot drives a fairly complete product build from a configuration and suits a clearly defined image. Yocto/OpenEmbedded organizes reusable software builds and distribution policies through layers, recipes, classes, distro, and machine metadata. Neither removes the need to own product policy, upgrades, and security response.</p>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Concern</th>
+<th>Common Buildroot approach</th>
+<th>Common Yocto/OpenEmbedded approach</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Getting started</td>
+<td>defconfig + menuconfig + complete image build</td>
+<td>machine/distro/image settings and multiple layers/recipes</td>
+</tr>
+<tr>
+<td>Product customization</td>
+<td><code>BR2_EXTERNAL</code>, board files, packages, overlays</td>
+<td>layers, recipes, appends, classes, image/distro configuration</td>
+</tr>
+<tr>
+<td>Reuse across products</td>
+<td>External trees and shared packages; product configs still need governance</td>
+<td>Layer/recipe metadata supports reuse across boards, distros, and teams</td>
+</tr>
+<tr>
+<td>Software-update model</td>
+<td>Often rebuild the complete product image from pinned inputs</td>
+<td>Can build more granular workflows around recipes, package feeds, and SDKs</td>
+</tr>
+<tr>
+<td>Team engineering</td>
+<td>Good for a focused, centrally configured, version-controlled image</td>
+<td>Good for complex BSPs, product variants, and long-lived standardized metadata</td>
+</tr>
+<tr>
+<td>Cost</td>
+<td>Direct configuration and full rebuilds; scale requires external-tree and upgrade discipline</td>
+<td>More upfront concepts/infrastructure; well-governed metadata can improve reuse</td>
+</tr>
+</tbody>
+</table>
+<p>Do not choose only by image size: both can produce a small rootfs by trimming dependencies. Ask which build system the silicon vendor supports; whether several SoCs/boards must share applications; whether the team maintains multiple product distros, SDKs, and supply-chain inventories; whether it can maintain recipes/layers; and who owns security fixes and regression tests. A small evaluation on the same board, software set, and update requirements is more useful than comparing menu complexity.</p>
+<p>A deliverable Buildroot project should version these inputs and build on a clean Linux CI host:</p>
+<pre class="kb-code"><code class="language-text">Buildroot release/tag/commit + BR2_EXTERNAL commit
++ product defconfig + kernel/BusyBox configs + board files
++ local patches + application revisions + source hashes/mirror policy
+→ make → legal-info / manifest → image hashes → QEMU or board test record
+</code></pre>
+<p>Do not version <code>output/</code> instead of the inputs, or keep only one developer's <code>.config</code> without the external tree, patches, kernel configuration, and toolchain choice. Before release, review <code>make legal-info</code> warnings and package manifests, save <code>sha256sum output/images/*</code>, and actually test the image in CI. Buildroot organizes component sources and builds; it does not automatically provide secure OTA, image signing, key custody, A/B updates, rollback, or vulnerability response. These are product architecture responsibilities that need owners and test cases.</p>
+<p>References: <a href="https://buildroot.org/downloads/manual/manual.html">Buildroot manual</a>, <a href="https://buildroot.org/download.html">2025.02 LTS releases and maintenance updates</a>, <a href="https://www.qemu.org/docs/master/system/linuxboot.html">QEMU direct Linux boot</a>, <a href="https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt">QEMU board readme</a>, and the <a href="https://docs.yoctoproject.org/6.0.2/dev-manual/poky-manual-setup.html">Yocto 6.0.2 manual setup</a>. This guide pins the maintained 2025.02.18 LTS for reproducible commands; defconfigs and package versions can differ across releases. Further reading: the <a href="https://mp.weixin.qq.com/s/nGNtRB45EYnPZSHch7_56g">original PPSBBS article</a>; this guide independently organizes and checks the technical material without reproducing its figures.</p></div>
+      <div class="kb-section"><h2 id="references">References and next article</h2>
+<p><a href="/posts/en/yocto-from-zero/">Next: Yocto from scratch</a> · <a href="/knowledge-base/en/">Knowledge Base</a></p></div>
     </div>
   </div></div></div></div><div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <a href="/">yanruihe</a></div><div class="theme-info info-item">Buildroot · Embedded Linux</div></div></footer></div>
 </div></main><script src="/js/i18n.js"></script></body></html>
