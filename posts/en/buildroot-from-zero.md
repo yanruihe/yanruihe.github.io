@@ -2,6 +2,18 @@
 
 This walkthrough pins Buildroot 2025.02.18 LTS and uses `qemu_x86_64_defconfig` with QEMU. The goal is a bootable system, not just a cross-compiled application: Buildroot creates a toolchain, Linux kernel, and root filesystem. QEMU supplies virtual firmware. A real ARM board still needs its matching bootloader, device tree, drivers, and BSP.
 
+## First, why can Buildroot build a whole system?
+
+Buildroot does **not reimplement Linux in C**. It is primarily a framework of Makefiles, Kconfig configuration, scripts, and patches. The kernel, GCC, C library, and BusyBox are separate upstream projects. Buildroot selects versions and options, resolves package dependencies, fetches sources, cross-compiles components, installs them into a target filesystem, and produces the requested images. Thus `make` drives a configured build graph rather than one giant C program.
+
+```text
+Board defconfig → .config → toolchain (binutils / GCC / C library, or external)
+                         → target packages (BusyBox and applications)
+                         → kernel / optional bootloader → root filesystem → images
+```
+
+This is a **responsibility map**, not a strict task execution order. The `qemu_x86_64_defconfig` in this article builds a kernel and root filesystem while QEMU provides virtual BIOS firmware; **this example does not build U-Boot**. The C library is configurable rather than always musl. BusyBox supplies small userspace utilities and the default init, not the kernel or Buildroot itself.
+
 ## 1. Prepare the host
 
 Build as a normal user on Linux. Windows users can use a Linux VM or WSL2 on its Linux filesystem. The following is for Ubuntu 24.04; consult the [Buildroot host requirements](https://buildroot.org/downloads/manual/manual.html#requirement-mandatory) for other distributions. Allow ample disk, memory, and network capacity.
@@ -27,7 +39,15 @@ test -s output/images/bzImage
 test -s output/images/rootfs.ext2
 ```
 
-The initial build downloads sources and builds the toolchain, target packages, kernel, and filesystem. Avoid assuming top-level `make -j` is needed. `output/build/` contains build work, `output/host/` contains host tools and the sysroot, and `output/images/` contains deployable artifacts. `output/target/` is not itself a bootable root filesystem.
+The initial build downloads sources and builds the toolchain, target packages, kernel, and filesystem. Avoid assuming top-level `make -j` is needed. Keep the artifacts distinct:
+
+| Path | Purpose |
+| --- | --- |
+| `.config` | Full configuration; `make savedefconfig` extracts a smaller board configuration for version control |
+| `output/build/` | Per-component extraction, configuration, and compilation |
+| `output/host/` | Host tools, cross-toolchain, and target sysroot; `output/staging/` is a compatibility symlink to that sysroot |
+| `output/target/` | Almost the target filesystem, but lacking proper device nodes and some permissions; **do not deploy it** |
+| `output/images/` | Kernel, root filesystem, and other final artifacts selected by the configuration |
 
 ## 3. Boot and inspect the system
 
@@ -74,6 +94,6 @@ make savedefconfig BR2_DEFCONFIG=board/demo/demo_defconfig
 git status --short
 ```
 
-Commit the defconfig, overlay, patches, and pinned versions, not the entire `output/` tree. For real hardware, select a matching board defconfig and verify CPU/ABI, bootloader, kernel configuration, device tree, partitions, serial console, and flashing procedure. A QEMU image is not directly flashable to an unrelated board. For build errors, inspect the failing package and `output/build/`; for boot errors, check kernel arguments, root device, and serial output. Handle source and license obligations before shipping.
+Commit the defconfig, overlay, patches, and pinned versions, not the entire `output/` tree. A config file alone does not guarantee a byte-for-byte reproducible build: pin Buildroot and external source versions, patches, toolchain, and host environment. For real hardware, select a matching board defconfig and verify CPU/ABI, bootloader, kernel configuration, device tree, partitions, serial console, and flashing procedure. A QEMU image is not directly flashable to an unrelated board. For build errors, inspect the failing package and `output/build/`; for boot errors, check kernel arguments, root device, and serial output. Buildroot does not automatically solve OTA, security updates, or product lifecycle management. Handle source and license obligations before shipping. For layered metadata and distribution policy, compare the [Yocto from-zero guide](/posts/en/yocto-from-zero/).
 
-References: [Buildroot manual](https://buildroot.org/downloads/manual/manual.html), [LTS release information](https://buildroot.org/download.html), and [QEMU board readme](https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt).
+References: [Buildroot manual](https://buildroot.org/downloads/manual/manual.html), [LTS release information](https://buildroot.org/download.html), and [QEMU board readme](https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt). Further reading: the [original PPSBBS article](https://mp.weixin.qq.com/s/nGNtRB45EYnPZSHch7_56g); this guide independently organizes and checks the technical material without reproducing its figures.

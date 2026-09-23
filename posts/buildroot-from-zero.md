@@ -2,6 +2,18 @@
 
 本篇选择 Buildroot 2025.02.18 LTS、`qemu_x86_64_defconfig` 和 QEMU。目标不是交叉编译某个单独程序，而是从源码生成交叉工具链、Linux 内核、根文件系统，最后启动并验证一个可运行的系统。QEMU 的虚拟 BIOS 负责早期引导；换成真实 ARM 板时，Bootloader、设备树和板级驱动还需要对应 BSP。
 
+## 先弄清原理：Buildroot 为什么能构建一整套系统？
+
+Buildroot **不是用 C 语言重新实现 Linux**。它本身主要由 Makefile、Kconfig 配置、脚本和补丁组成；内核、GCC、C 库、BusyBox 等来自各自独立的上游项目。Buildroot 负责选择版本与选项、处理包之间的依赖、下载源码、交叉编译、安装到目标根文件系统，再生成指定格式的镜像。因此，`make` 触发的是一条受配置驱动的构建链，而不是编译一个巨大的 C 项目。
+
+```text
+板级 defconfig → .config → 工具链（binutils / GCC / C 库，或外部工具链）
+                          → 目标软件（例如 BusyBox 和自己的应用）
+                          → 内核 / 可选 Bootloader → 根文件系统 → 镜像
+```
+
+这是一张**职责图**，不是严格的任务执行顺序；具体组件取决于配置。本文的 `qemu_x86_64_defconfig` 生成内核和根文件系统，QEMU 使用虚拟 BIOS，**没有在这个示例中构建 U-Boot**。C 库也不是固定为 musl，可按配置选择 glibc、musl 或 uClibc-ng 等。BusyBox 提供精简用户空间工具和默认 init；它不是内核，也不是 Buildroot 本身。
+
 ## 1. 准备构建主机
 
 在 Linux 主机上以普通用户构建；Windows 用户可用 Linux 虚拟机或 WSL2 的 Linux 文件系统，不要把大型构建目录放在 Windows 挂载盘。下面以 Ubuntu 24.04 为例，其他发行版按 [Buildroot 主机依赖](https://buildroot.org/downloads/manual/manual.html#requirement-mandatory) 安装等价软件。预留足够磁盘空间、内存和网络带宽；首次下载和编译可能耗时较长。
@@ -32,7 +44,15 @@ test -s output/images/bzImage
 test -s output/images/rootfs.ext2
 ```
 
-`output/build/` 是编译过程，`output/host/` 是主机工具链和 sysroot，`output/images/` 才是部署产物；不要把 `output/target/` 当成可直接启动的根文件系统。
+读懂产物目录，排错和发布才不会混淆：
+
+| 路径 | 用途 |
+| --- | --- |
+| `.config` | 本次构建的完整选择；用 `make savedefconfig` 提炼为便于版本管理的板级配置 |
+| `output/build/` | 各组件的解包、配置和编译现场 |
+| `output/host/` | 主机工具、交叉工具链和目标 sysroot；`output/staging/` 是指向 sysroot 的兼容性链接 |
+| `output/target/` | 接近目标根文件系统的安装树，但缺少正确设备节点和部分权限，**不能直接部署** |
+| `output/images/` | 内核、根文件系统及当前配置所选择的其他最终产物 |
 
 ## 3. 用 QEMU 启动并验证
 
@@ -86,6 +106,6 @@ make savedefconfig BR2_DEFCONFIG=board/demo/demo_defconfig
 git status --short
 ```
 
-提交 `demo_defconfig`、overlay、补丁及版本清单，不提交整个 `output/`。对真实板卡，先选择或编写匹配的 board defconfig，再确认 CPU/ABI、Bootloader、内核配置、设备树、存储分区、串口和刷机方式；QEMU 镜像不能直接刷入不相干的硬件。构建失败先读最后一个失败包的日志和 `output/build/`，启动失败先核对内核命令行、根设备和串口，避免无目的地清空整个输出目录。软件许可证和源代码提供义务须在发布前处理。
+提交 `demo_defconfig`、overlay、补丁及版本清单，不提交整个 `output/`。只有配置文件还不足以保证逐字节复现：还要固定 Buildroot 与外部源码版本、补丁、工具链及构建环境。对真实板卡，先选择或编写匹配的 board defconfig，再确认 CPU/ABI、Bootloader、内核配置、设备树、存储分区、串口和刷机方式；QEMU 镜像不能直接刷入不相干的硬件。构建失败先读最后一个失败包的日志和 `output/build/`，启动失败先核对内核命令行、根设备和串口，避免无目的地清空整个输出目录。Buildroot 也不会自动解决 OTA、安全更新和产品生命周期管理；软件许可证和源代码提供义务须在发布前处理。若项目需要多层元数据和发行版策略，可对照[Yocto 从零构建篇](/posts/yocto-from-zero/)选择方案。
 
-参考：[Buildroot 手册](https://buildroot.org/downloads/manual/manual.html)、[2025.02 LTS 下载信息](https://buildroot.org/download.html)、[QEMU 板级说明](https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt)。
+参考：[Buildroot 手册](https://buildroot.org/downloads/manual/manual.html)、[2025.02 LTS 下载信息](https://buildroot.org/download.html)、[QEMU 板级说明](https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt)。延伸阅读：[PPSBBS 技术论坛原文](https://mp.weixin.qq.com/s/nGNtRB45EYnPZSHch7_56g)；本文重新组织和核对技术内容，不转载原文图表。

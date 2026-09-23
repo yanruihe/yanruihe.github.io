@@ -12,7 +12,10 @@
     <div class="article-title"><span class="title-hover-animation">从零构建嵌入式 Linux：Buildroot</span></div>
     <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Buildroot</span></div><div class="kb-meta">2026-09-23 · Buildroot 2025.02.18 LTS · QEMU x86_64</div></div></div>
     <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>从源码生成交叉工具链、Linux 内核和根文件系统，在 QEMU 中启动并验证，而不是只编译一个程序。QEMU 的虚拟 BIOS 负责早期引导；真实 ARM 板仍需对应 Bootloader、设备树和 BSP。</p><p><a href="#host">主机准备</a> · <a href="#build">构建</a> · <a href="#boot">启动</a> · <a href="#custom">自定义</a> · <a href="#hardware">板级迁移</a></p></div>
+      <div class="kb-lead"><p>从源码生成交叉工具链、Linux 内核和根文件系统，在 QEMU 中启动并验证，而不是只编译一个程序。QEMU 的虚拟 BIOS 负责早期引导；真实 ARM 板仍需对应 Bootloader、设备树和 BSP。</p><p><a href="#why">构建原理</a> · <a href="#host">主机准备</a> · <a href="#build">构建</a> · <a href="#boot">启动</a> · <a href="#custom">自定义</a> · <a href="#hardware">板级迁移</a></p></div>
+      <div class="kb-section"><h2 id="why">先弄清原理：Buildroot 为什么能构建一整套系统？</h2><p>Buildroot <strong>不是用 C 语言重新实现 Linux</strong>。它本身主要由 Makefile、Kconfig 配置、脚本和补丁组成；内核、GCC、C 库、BusyBox 等来自各自独立的上游项目。Buildroot 负责选择版本与选项、处理包之间的依赖、下载源码、交叉编译、安装到目标根文件系统，再生成指定格式的镜像。因此，<code>make</code> 触发的是一条受配置驱动的构建链，而不是编译一个巨大的 C 项目。</p><pre class="kb-code"><code>板级 defconfig → .config → 工具链（binutils / GCC / C 库，或外部工具链）
+                          → 目标软件（例如 BusyBox 和自己的应用）
+                          → 内核 / 可选 Bootloader → 根文件系统 → 镜像</code></pre><p>这是一张<strong>职责图</strong>，不是严格的任务执行顺序；具体组件取决于配置。本文的 <code>qemu_x86_64_defconfig</code> 生成内核和根文件系统，QEMU 使用虚拟 BIOS，<strong>没有在这个示例中构建 U-Boot</strong>。C 库也不是固定为 musl，可按配置选择 glibc、musl 或 uClibc-ng 等。BusyBox 提供精简用户空间工具和默认 init；它不是内核，也不是 Buildroot 本身。</p></div>
       <div class="kb-section"><h2 id="host">1. 准备构建主机</h2><p>在 Linux 主机上以普通用户构建。Windows 可用 Linux 虚拟机或 WSL2 的 Linux 文件系统；不要把大型构建目录放在 Windows 挂载盘。下面以 Ubuntu 24.04 为例，其他发行版参考<a href="https://buildroot.org/downloads/manual/manual.html#requirement-mandatory">官方主机依赖</a>。预留足够磁盘、内存和网络带宽。</p><pre class="kb-code"><code>sudo apt update
 sudo apt install -y build-essential git wget cpio unzip rsync file bc \
   bzip2 gzip xz-utils patch sed gawk qemu-system-x86</code></pre><p>仅安装主机依赖需要 sudo；不要使用 <code>sudo make</code>。</p></div>
@@ -23,7 +26,7 @@ make qemu_x86_64_defconfig
 make
 ls -lh output/images/
 test -s output/images/bzImage
-test -s output/images/rootfs.ext2</code></pre><p>首次构建会下载源码并生成工具链、目标软件、内核与根文件系统；不要盲目给顶层 <code>make</code> 加 <code>-j</code>。<code>output/build/</code> 是构建过程，<code>output/host/</code> 是主机工具和 sysroot，<code>output/images/</code> 才是部署产物；不要把 <code>output/target/</code> 直接当启动镜像。</p></div>
+test -s output/images/rootfs.ext2</code></pre><p>首次构建会下载源码并生成工具链、目标软件、内核与根文件系统；不要盲目给顶层 <code>make</code> 加 <code>-j</code>。读懂产物目录，排错和发布才不会混淆：</p><table class="kb-table"><thead><tr><th>路径</th><th>用途</th></tr></thead><tbody><tr><td><code>.config</code></td><td>本次构建的完整选择；用 <code>make savedefconfig</code> 提炼为便于版本管理的板级配置</td></tr><tr><td><code>output/build/</code></td><td>各组件的解包、配置和编译现场</td></tr><tr><td><code>output/host/</code></td><td>主机工具、交叉工具链和目标 sysroot；<code>output/staging/</code> 是指向 sysroot 的兼容性链接</td></tr><tr><td><code>output/target/</code></td><td>接近目标根文件系统的安装树，但缺少正确设备节点和部分权限，<strong>不能直接部署</strong></td></tr><tr><td><code>output/images/</code></td><td>内核、根文件系统及当前配置所选择的其他最终产物</td></tr></tbody></table></div>
       <div class="kb-section"><h2 id="boot">3. 启动 QEMU 并验证</h2><p>使用所选 defconfig 的<a href="https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt">板级说明</a>中的启动参数：</p><pre class="kb-code"><code>qemu-system-x86_64 -M pc \
   -kernel output/images/bzImage \
   -drive file=output/images/rootfs.ext2,if=virtio,format=raw \
@@ -39,8 +42,8 @@ case "$1" in
   *) exit 1 ;;
 esac</code></pre><p>运行 <code>chmod +x board/demo/overlay/etc/init.d/S99demo</code>，再执行 <code>make menuconfig</code>；在 <strong>System configuration → Root filesystem overlay directories</strong> 填入 <code>board/demo/overlay</code>。保存后再次 <code>make</code>、启动 QEMU。启动日志应出现提示，客户机中可用 <code>test -x /etc/init.d/S99demo</code> 检查。正式应用应做成 package，overlay 仅用于最小演示。</p></div>
       <div class="kb-section"><h2 id="hardware">5. 固化配置并迁移到真实硬件</h2><pre class="kb-code"><code>make savedefconfig BR2_DEFCONFIG=board/demo/demo_defconfig
-git status --short</code></pre><p>提交 defconfig、overlay、补丁与版本清单，不提交整个 <code>output/</code>。真实开发板需对应的 board defconfig，并逐项核对 CPU/ABI、Bootloader、内核配置、设备树、分区、串口和刷机方法；QEMU 镜像不能直接刷进不相干的硬件。构建失败查看失败包及 <code>output/build/</code>；启动失败先检查内核命令行、根设备和串口。发布前处理软件许可证及源代码提供义务。</p></div>
-      <div class="kb-section"><h2>参考与下一篇</h2><p><a href="https://buildroot.org/downloads/manual/manual.html">Buildroot 官方手册</a> · <a href="https://buildroot.org/download.html">2025.02 LTS 下载信息</a> · <a href="/posts/yocto-from-zero/">下一篇：Yocto 从零构建</a> · <a href="/knowledge-base/">知识库</a></p></div>
+git status --short</code></pre><p>提交 defconfig、overlay、补丁与版本清单，不提交整个 <code>output/</code>。只有配置文件还不足以保证逐字节复现：还要固定 Buildroot 与外部源码版本、补丁、工具链及构建环境。真实开发板需对应的 board defconfig，并逐项核对 CPU/ABI、Bootloader、内核配置、设备树、分区、串口和刷机方法；QEMU 镜像不能直接刷进不相干的硬件。构建失败查看失败包及 <code>output/build/</code>；启动失败先检查内核命令行、根设备和串口。Buildroot 也不会自动解决 OTA、安全更新和产品生命周期管理；发布前处理软件许可证及源代码提供义务。若项目需要多层元数据和发行版策略，可对照<a href="/posts/yocto-from-zero/">Yocto 从零构建篇</a>选择方案。</p></div>
+      <div class="kb-section"><h2>参考与下一篇</h2><p><a href="https://buildroot.org/downloads/manual/manual.html">Buildroot 官方手册</a> · <a href="https://buildroot.org/download.html">2025.02 LTS 下载信息</a> · <a href="https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt">QEMU 板级说明</a> · <a href="https://mp.weixin.qq.com/s/nGNtRB45EYnPZSHch7_56g">PPSBBS 技术论坛原文</a>（本文重新组织和核对技术内容，不转载原文图表）· <a href="/posts/yocto-from-zero/">下一篇：Yocto 从零构建</a> · <a href="/knowledge-base/">知识库</a></p></div>
     </div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <a href="/">yanruihe</a></div><div class="theme-info info-item">Buildroot · 嵌入式 Linux</div></div></footer></div>
