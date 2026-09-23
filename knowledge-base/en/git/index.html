@@ -22,9 +22,10 @@
     <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Git</span></div><div class="kb-meta">Reusable workflows for branches, commits, synchronization, and recovery</div></div></div>
     <div class="article-content keep-markdown-body">
       <div class="kb-lead"><p>Confirm the state before changing it; make the change recoverable before cleaning anything up.</p><p>This page covers Git workflows, branch management, commit reviews, and version recovery.</p></div>
-      <div class="kb-section"><h2 id="model">1. Mental model</h2><p>Git work is easiest to reason about as four areas: working tree, staging area, local repository, and remote repository.</p><pre class="kb-code"><code>Working tree --git add--&gt; Staging area --git commit--&gt; Local repo --git push--&gt; Remote repo
-   ^                                      |
-   +------------- git restore ------------+</code></pre><p>Start with <code>git status</code>, then decide whether to stage, commit, undo, or synchronize.</p></div>
+      <div class="kb-section"><h2 id="model">1. How Git saves and uploads changes</h2><p>Suppose you edit <code>README.md</code>. The file is not automatically uploaded to GitHub. It moves through four steps:</p><ol><li><strong>Working tree</strong>: you edit the file on your computer; the change is not yet a Git commit.</li><li><strong>Staging area</strong>: <code>git add README.md</code> selects the content for the next commit.</li><li><strong>Local repository</strong>: <code>git commit -m &quot;docs: update README&quot;</code> records a commit on your computer.</li><li><strong>Remote repository</strong>: <code>git push</code> uploads the commit to GitHub.</li></ol><pre class="kb-code"><code>git status
+git add README.md
+git commit -m "docs: update README"
+git push</code></pre><p>Use <code>git status</code> to see what changed and what is staged. <code>git add</code> does not create a commit, and <code>git commit</code> does not upload it. For the first push of a new branch, use <code>git push -u origin HEAD</code>.</p></div>
       <div class="kb-section"><h2 id="daily">2. Daily workflow</h2><pre class="kb-code"><code>git switch main
 git pull --ff-only origin main
 git switch -c feature/short-description

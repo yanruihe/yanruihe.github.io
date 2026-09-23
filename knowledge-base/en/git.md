@@ -1,12 +1,22 @@
 # Git Knowledge Base
 
-## Mental model
+## How Git saves and uploads changes
 
-Git work is easiest to reason about as four areas: working tree, staging area, local repository, and remote repository.
+Suppose you edit `README.md`. The file is not automatically uploaded to GitHub. It moves through four steps:
 
-```text
-Working tree --git add--> Staging area --git commit--> Local repo --git push--> Remote repo
+1. **Working tree**: you edit the file on your computer; the change is not yet a Git commit.
+2. **Staging area**: `git add README.md` selects the content for the next commit.
+3. **Local repository**: `git commit -m "docs: update README"` records a commit on your computer.
+4. **Remote repository**: `git push` uploads the commit to GitHub.
+
+```bash
+git status
+git add README.md
+git commit -m "docs: update README"
+git push
 ```
+
+Use `git status` to see what changed and what is staged. `git add` does not create a commit, and `git commit` does not upload it. For the first push of a new branch, use `git push -u origin HEAD`.
 
 ## Daily workflow
 

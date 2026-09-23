@@ -22,9 +22,10 @@
     <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Git</span></div><div class="kb-meta">可复用的分支、提交、同步与恢复流程</div></div></div>
     <div class="article-content keep-markdown-body">
       <div class="kb-lead"><p>先确认状态，再改变状态；先保证可恢复，再做清理。</p><p>本页面介绍 Git 的日常使用、分支管理、提交评审与版本恢复。</p></div>
-      <div class="kb-section"><h2 id="model">1. 心智模型</h2><p>Git 的日常工作可以看成四个区域：工作区、暂存区、本地仓库和远程仓库。</p><pre class="kb-code"><code>工作区 --git add--&gt; 暂存区 --git commit--&gt; 本地仓库 --git push--&gt; 远程仓库
-   ^                                      |
-   +------------- git restore ------------+</code></pre><p>先用 <code>git status</code> 确认状态，再决定是暂存、提交、撤销还是同步。</p></div>
+      <div class="kb-section"><h2 id="model">1. Git 如何保存和上传修改</h2><p>例如你修改了 <code>README.md</code>，文件不会自动上传到 GitHub。它会经过下面四步：</p><ol><li><strong>工作区</strong>：你在电脑上编辑文件，改动还没有成为 Git 的版本记录。</li><li><strong>暂存区</strong>：运行 <code>git add README.md</code>，选中这次准备提交的内容。</li><li><strong>本地仓库</strong>：运行 <code>git commit -m &quot;docs: update README&quot;</code>，在电脑上保存一条提交记录。</li><li><strong>远程仓库</strong>：运行 <code>git push</code>，把已提交的记录上传到 GitHub。</li></ol><pre class="kb-code"><code>git status
+git add README.md
+git commit -m "docs: update README"
+git push</code></pre><p><code>git status</code> 可以随时查看哪些文件被修改、哪些内容已暂存。<code>git add</code> 不是提交，<code>git commit</code> 也不会自动上传。如果是新分支首次推送，使用 <code>git push -u origin HEAD</code>。</p></div>
       <div class="kb-section"><h2 id="daily">2. 推荐日常流程</h2><pre class="kb-code"><code>git switch main
 git pull --ff-only origin main
 git switch -c feature/short-description

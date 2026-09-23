@@ -1,16 +1,22 @@
 # Git 知识库
 
-## 1. 心智模型
+## 1. Git 如何保存和上传修改
 
-Git 的日常工作可以看成四个区域：工作区、暂存区、本地仓库和远程仓库。
+例如你修改了 `README.md`，文件不会自动上传到 GitHub。它会经过下面四步：
 
-```text
-工作区 --git add--> 暂存区 --git commit--> 本地仓库 --git push--> 远程仓库
-   ^                                      |
-   +------------- git restore ------------+
+1. **工作区**：你在电脑上编辑文件，改动还没有成为 Git 的版本记录。
+2. **暂存区**：运行 `git add README.md`，选中这次准备提交的内容。
+3. **本地仓库**：运行 `git commit -m "docs: update README"`，在电脑上保存一条提交记录。
+4. **远程仓库**：运行 `git push`，把已提交的记录上传到 GitHub。
+
+```bash
+git status
+git add README.md
+git commit -m "docs: update README"
+git push
 ```
 
-先用 `git status` 确认状态，再决定是暂存、提交、撤销还是同步。不要把“文件已经存在”误认为“变更已经进入提交”。
+`git status` 可以随时查看哪些文件被修改、哪些内容已暂存。`git add` 不是提交，`git commit` 也不会自动上传。如果是新分支首次推送，使用 `git push -u origin HEAD`。
 
 ## 2. 推荐日常流程
 
