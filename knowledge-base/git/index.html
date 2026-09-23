@@ -21,7 +21,7 @@
     <div class="article-title"><span class="title-hover-animation">Git 知识库</span></div>
     <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Git</span></div><div class="kb-meta">可复用的分支、提交、同步与恢复流程</div></div></div>
     <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>先确认状态，再改变状态；先保证可恢复，再做清理。</p><p>本页面向日常开发、文档维护和 Yocto 层协作。</p></div>
+      <div class="kb-lead"><p>先确认状态，再改变状态；先保证可恢复，再做清理。</p><p>本页面介绍 Git 的日常使用、分支管理、提交评审与版本恢复。</p></div>
       <div class="kb-section"><h2 id="model">1. 心智模型</h2><p>Git 的日常工作可以看成四个区域：工作区、暂存区、本地仓库和远程仓库。</p><pre class="kb-code"><code>工作区 --git add--&gt; 暂存区 --git commit--&gt; 本地仓库 --git push--&gt; 远程仓库
    ^                                      |
    +------------- git restore ------------+</code></pre><p>先用 <code>git status</code> 确认状态，再决定是暂存、提交、撤销还是同步。</p></div>
@@ -33,12 +33,12 @@ git status
 git diff
 git diff --check
 git add -p
-git commit -m "docs: update yocto notes"
+git commit -m "docs: update git notes"
 
 git fetch origin
 git rebase origin/main
 git push -u origin HEAD</code></pre><p>小提交更容易审查和回滚。提交信息建议使用 <code>docs:</code>、<code>feat:</code>、<code>fix:</code>、<code>build:</code> 等前缀，并说明结果而不是只描述动作。</p></div>
-      <div class="kb-section"><h2 id="branch">3. 分支、合并与变基</h2><ul><li>新功能或知识专题使用短生命周期分支，例如 <code>feature/yocto-notes</code>。</li><li>本地尚未共享的提交可以用 <code>rebase</code> 整理历史。</li><li>已推送且被别人依赖的提交不要随意重写；需要修正时优先追加修复提交。</li><li>合并前确认工作区干净，并阅读完整 diff。</li></ul><pre class="kb-code"><code>git log --oneline --decorate --graph -20
+      <div class="kb-section"><h2 id="branch">3. 分支、合并与变基</h2><ul><li>新功能或知识专题使用短生命周期分支，例如 <code>feature/logging</code>。</li><li>本地尚未共享的提交可以用 <code>rebase</code> 整理历史。</li><li>已推送且被别人依赖的提交不要随意重写；需要修正时优先追加修复提交。</li><li>合并前确认工作区干净，并阅读完整 diff。</li></ul><pre class="kb-code"><code>git log --oneline --decorate --graph -20
 git diff origin/main...HEAD
 git diff --name-only origin/main...HEAD</code></pre></div>
       <div class="kb-section"><h2 id="recover">4. 安全撤销与恢复</h2><pre class="kb-code"><code># 取消尚未提交的工作区修改
@@ -52,17 +52,17 @@ git revert &lt;commit&gt;
 
 # 查找丢失的提交或分支指针
 git reflog</code></pre><p><code>reset --hard</code> 会直接丢弃工作区内容；公共分支的历史修复优先选择 <code>revert</code>。</p></div>
-      <div class="kb-section"><h2 id="yocto">5. 与 Yocto 的协作约定</h2><ul><li>一个功能或配方修复尽量对应一个提交。</li><li>提交消息写清楚机器、镜像或配方范围，例如 <code>yocto: add spi overlay to machine config</code>。</li><li>记录构建分支、层版本、机器名、镜像目标和验证命令。</li><li>不要提交 <code>tmp/</code>、下载目录和共享状态缓存，只提交配置、层、配方、补丁和文档。</li></ul></div>
-      <div class="kb-section"><h2 id="publish">6. 发布到本仓库</h2><pre class="kb-code"><code>git fetch origin
+      <div class="kb-section"><h2 id="review">5. 提交与评审约定</h2><ul><li>一个提交聚焦一个逻辑变更，方便理解、审查和回滚。</li><li>提交消息用简短前缀标明类型与范围，例如 <code>docs(git): clarify restore examples</code>。</li><li>提交前检查完整 diff，确认没有密钥、临时文件或无关改动。</li><li>合并前记录评审意见和验证结果；需要修改时追加清晰的提交。</li></ul></div>
+      <div class="kb-section"><h2 id="publish">6. 发布到远程仓库</h2><pre class="kb-code"><code>git fetch origin
 git switch main
 git pull --ff-only origin main
-git switch -c docs/update-knowledge-base
-# 修改静态页面和知识库 Markdown
+git switch -c docs/update-git-notes
+# 修改 Git 文档或相关文件
 git diff --check
-git add README.md knowledge-base
-git commit -m "docs: integrate git and yocto knowledge base"
+git add path/to/changed-files
+git commit -m "docs(git): update workflow notes"
 git push -u origin HEAD</code></pre></div>
-      <div class="kb-section"><h2>参考资料</h2><p><a href="https://git-scm.com/docs/git-branch" target="_blank" rel="noopener">Git 分支文档</a> · <a href="https://git-scm.com/docs/git-rebase" target="_blank" rel="noopener">Git 变基文档</a> · <a href="https://git-scm.com/docs/git-pull" target="_blank" rel="noopener">Git 拉取文档</a></p><p><a href="/knowledge-base/">返回知识库总览</a> · <a href="/knowledge-base/yocto/">下一篇：Yocto 使用知识库</a></p></div>
+      <div class="kb-section"><h2>参考资料</h2><p><a href="https://git-scm.com/docs/git-branch" target="_blank" rel="noopener">Git 分支文档</a> · <a href="https://git-scm.com/docs/git-rebase" target="_blank" rel="noopener">Git 变基文档</a> · <a href="https://git-scm.com/docs/git-pull" target="_blank" rel="noopener">Git 拉取文档</a></p><p><a href="/knowledge-base/">返回知识库总览</a></p></div>
     </div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Git 知识库</div></div></footer></div>

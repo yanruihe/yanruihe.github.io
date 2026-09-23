@@ -21,7 +21,7 @@
     <div class="article-title"><span class="title-hover-animation">Git Knowledge Base</span></div>
     <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Git</span></div><div class="kb-meta">Reusable workflows for branches, commits, synchronization, and recovery</div></div></div>
     <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>Confirm the state before changing it; make the change recoverable before cleaning anything up.</p><p>This page covers daily development, documentation maintenance, and Yocto layer collaboration.</p></div>
+      <div class="kb-lead"><p>Confirm the state before changing it; make the change recoverable before cleaning anything up.</p><p>This page covers Git workflows, branch management, commit reviews, and version recovery.</p></div>
       <div class="kb-section"><h2 id="model">1. Mental model</h2><p>Git work is easiest to reason about as four areas: working tree, staging area, local repository, and remote repository.</p><pre class="kb-code"><code>Working tree --git add--&gt; Staging area --git commit--&gt; Local repo --git push--&gt; Remote repo
    ^                                      |
    +------------- git restore ------------+</code></pre><p>Start with <code>git status</code>, then decide whether to stage, commit, undo, or synchronize.</p></div>
@@ -33,12 +33,12 @@ git status
 git diff
 git diff --check
 git add -p
-git commit -m "docs: update yocto notes"
+git commit -m "docs: update git notes"
 
 git fetch origin
 git rebase origin/main
 git push -u origin HEAD</code></pre><p>Small commits are easier to review and revert. Use prefixes such as <code>docs:</code>, <code>feat:</code>, <code>fix:</code>, and <code>build:</code>; describe the result rather than only the action.</p></div>
-      <div class="kb-section"><h2 id="branch">3. Branching, merging, and rebasing</h2><ul><li>Use short-lived branches for features or knowledge topics, such as <code>feature/yocto-notes</code>.</li><li>Rebase local, unpublished commits when you need to tidy the history.</li><li>Do not rewrite commits that others already depend on; add a corrective commit instead.</li><li>Before merging, make sure the worktree is clean and read the complete diff.</li></ul><pre class="kb-code"><code>git log --oneline --decorate --graph -20
+      <div class="kb-section"><h2 id="branch">3. Branching, merging, and rebasing</h2><ul><li>Use short-lived branches for features or knowledge topics, such as <code>feature/logging</code>.</li><li>Rebase local, unpublished commits when you need to tidy the history.</li><li>Do not rewrite commits that others already depend on; add a corrective commit instead.</li><li>Before merging, make sure the worktree is clean and read the complete diff.</li></ul><pre class="kb-code"><code>git log --oneline --decorate --graph -20
 git diff origin/main...HEAD
 git diff --name-only origin/main...HEAD</code></pre></div>
       <div class="kb-section"><h2 id="recover">4. Safe undo and recovery</h2><pre class="kb-code"><code># Cancel an uncommitted working-tree change
@@ -52,17 +52,17 @@ git revert &lt;commit&gt;
 
 # Find lost commits or branch pointers
 git reflog</code></pre><p><code>reset --hard</code> discards working-tree content. For shared branches, prefer <code>revert</code> when correcting history.</p></div>
-      <div class="kb-section"><h2 id="yocto">5. Collaboration with Yocto</h2><ul><li>Keep one feature or recipe fix in one focused commit where possible.</li><li>Include the machine, image, or recipe scope in the message, for example <code>yocto: add spi overlay to machine config</code>.</li><li>Record the build branch, layer version, machine, image target, and verification command.</li><li>Do not commit <code>tmp/</code>, download directories, or shared-state caches; commit configuration, layers, recipes, patches, and documentation.</li></ul></div>
-      <div class="kb-section"><h2 id="publish">6. Publish this site</h2><pre class="kb-code"><code>git fetch origin
+      <div class="kb-section"><h2 id="review">5. Commit and review conventions</h2><ul><li>Keep each commit focused on one logical change so it is easy to understand, review, and revert.</li><li>Use a short prefix for the type and scope, for example <code>docs(git): clarify restore examples</code>.</li><li>Review the complete diff and check for secrets, temporary files, or unrelated changes before committing.</li><li>Record review feedback and verification results before merging; add a clear follow-up commit when changes are needed.</li></ul></div>
+      <div class="kb-section"><h2 id="publish">6. Publish to a remote repository</h2><pre class="kb-code"><code>git fetch origin
 git switch main
 git pull --ff-only origin main
-git switch -c docs/update-knowledge-base
-# Edit static pages and knowledge-base Markdown
+git switch -c docs/update-git-notes
+# Edit Git documentation or related files
 git diff --check
-git add README.md knowledge-base
-git commit -m "docs: integrate git and yocto knowledge base"
+git add path/to/changed-files
+git commit -m "docs(git): update workflow notes"
 git push -u origin HEAD</code></pre></div>
-      <div class="kb-section"><h2>References</h2><p><a href="https://git-scm.com/docs/git-branch" target="_blank" rel="noopener">Git branches</a> · <a href="https://git-scm.com/docs/git-rebase" target="_blank" rel="noopener">Git rebase</a> · <a href="https://git-scm.com/docs/git-pull" target="_blank" rel="noopener">Git pull</a></p><p><a href="/knowledge-base/en/">Back to Knowledge Base</a> · <a href="/knowledge-base/en/yocto/">Next: Yocto Knowledge Base</a></p></div>
+      <div class="kb-section"><h2>References</h2><p><a href="https://git-scm.com/docs/git-branch" target="_blank" rel="noopener">Git branches</a> · <a href="https://git-scm.com/docs/git-rebase" target="_blank" rel="noopener">Git rebase</a> · <a href="https://git-scm.com/docs/git-pull" target="_blank" rel="noopener">Git pull</a></p><p><a href="/knowledge-base/en/">Back to Knowledge Base</a></p></div>
     </div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Git Knowledge Base</div></div></footer></div>

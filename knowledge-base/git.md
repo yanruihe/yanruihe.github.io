@@ -26,7 +26,7 @@ git diff --check
 
 # 只提交相关内容
 git add -p
-git commit -m "docs: update yocto notes"
+git commit -m "docs: update git notes"
 
 # 提交前同步主线
 git fetch origin
@@ -38,7 +38,7 @@ git push -u origin HEAD
 
 ## 3. 分支、合并与变基
 
-- 新功能或知识专题使用短生命周期分支，例如 `feature/yocto-notes`。
+- 新功能或知识专题使用短生命周期分支，例如 `feature/logging`。
 - 本地尚未共享的提交可以用 `rebase` 整理历史。
 - 已推送且被别人依赖的提交不要随意重写；需要修正时优先追加修复提交。
 - 合并前确认工作区干净，并阅读完整 diff，而不只看最后一个文件。
@@ -69,24 +69,24 @@ git reflog
 
 `reset --hard` 会直接丢弃工作区内容，除非已经确认目标和备份，否则不要使用。公共分支的历史修复优先选择 `revert`。
 
-## 5. 与 Yocto 的协作约定
+## 5. 提交与评审约定
 
-- 一个功能或配方修复尽量对应一个提交。
-- 提交消息写清楚机器、镜像或配方范围，例如 `yocto: add spi overlay to machine config`。
-- 记录构建分支、层版本、机器名、镜像目标和验证命令。
-- 生成物、下载目录和共享状态缓存通常不应提交；只提交配置、层、配方、补丁和文档。
+- 一个提交聚焦一个逻辑变更，方便理解、审查和回滚。
+- 提交消息用简短前缀标明类型与范围，例如 `docs(git): clarify restore examples`。
+- 提交前检查完整 diff，确认没有密钥、临时文件或无关改动。
+- 合并前记录评审意见和验证结果；修正问题时追加清晰的提交。
 
-## 6. 发布到本仓库
+## 6. 发布到远程仓库
 
 ```bash
 git fetch origin
 git switch main
 git pull --ff-only origin main
-git switch -c docs/update-knowledge-base
-# 修改静态页面和知识库 Markdown
+git switch -c docs/update-git-notes
+# 修改 Git 文档或相关文件
 git diff --check
-git add README.md knowledge-base
-git commit -m "docs: integrate git and yocto knowledge base"
+git add path/to/changed-files
+git commit -m "docs(git): update workflow notes"
 git push -u origin HEAD
 ```
 
