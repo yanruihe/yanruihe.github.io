@@ -1,6 +1,6 @@
 # meta-demo：Yocto 可运行示例层
 
-本示例整理自本地 `F:\MyBrain\yocto\examples\meta-demo`。它将脚本与 systemd unit 打包为 `hello-yocto`，并通过 `demo-image` 加入镜像。中英文说明分别见 [Yocto 知识库](../../yocto/) 和 [Yocto Knowledge Base](../../en/yocto/)。
+本示例将脚本与 systemd unit 打包为 `hello-yocto`，并通过 `demo-image` 加入镜像。中英文说明分别见 [Yocto 知识库](../../yocto/) 和 [Yocto Knowledge Base](../../en/yocto/)。
 
 ```text
 meta-demo/

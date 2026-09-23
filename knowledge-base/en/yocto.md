@@ -48,9 +48,9 @@ Pin layer branches or commits, record build metadata, keep generated directories
 
 ## 8. Practical example: add a systemd service to an image
 
-Adapted from local `F:\MyBrain\yocto\examples\meta-demo` and `08-systemd服务案例.md`. This is a complete layer with a recipe, script, service unit, and image recipe:
+This example provides a complete layer with a recipe, script, service unit, and image recipe:
 
-The site repository includes the [downloadable meta-demo layer](../examples/meta-demo/README.md), so readers do not need access to the local `F:` drive.
+The site repository includes the [downloadable meta-demo layer](../examples/meta-demo/README.md).
 
 ```text
 meta-demo/
@@ -61,9 +61,9 @@ meta-demo/
 └── recipes-core/images/demo-image.bb
 ```
 
-The recipe installs the script and unit and enables the service. The image recipe adds the package with `IMAGE_INSTALL:append = " hello-yocto"`. The script updates `/run/hello-yocto/status` every ten seconds. Copy the local example layer into your Yocto workspace, then run in Linux/WSL2 from a directory containing `poky`:
+The recipe installs the script and unit and enables the service. The image recipe adds the package with `IMAGE_INSTALL:append = " hello-yocto"`. The script updates `/run/hello-yocto/status` every ten seconds.
 
-Key lines from the local recipe are below; confirm that `UNPACKDIR` usage matches your Yocto release:
+Key lines from the recipe are below; confirm that `UNPACKDIR` usage matches your Yocto release:
 
 ```bitbake
 SRC_URI = "file://hello-yocto.sh file://hello-yocto.service"
@@ -102,7 +102,7 @@ For production, check the real license, non-root execution, and the BSP's init c
 
 ## 9. Troubleshooting example: package built, service absent from image
 
-Following local `09-调试排错与构建加速.md`, check each link in the chain: layer → recipe → package → image → runtime.
+Check each link in the chain: layer → recipe → package → image → runtime.
 
 ```bash
 bitbake-layers show-layers

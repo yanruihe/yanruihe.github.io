@@ -99,7 +99,7 @@ git commit -m "docs: clarify setup steps"
 
 ## 7. 双人协作 Demo：分支、评审、合并与同步
 
-下面根据本地 `git/demo/02-功能分支开发并合并.md` 和 `git/demo/03-多人同时修改导致冲突.md` 改写。使用 PowerShell，在临时目录中模拟远端、Alice 和 Bob 三个独立仓库；不会改动真实项目。
+使用 PowerShell，在临时目录中模拟远端、Alice 和 Bob 三个独立仓库；不会改动真实项目。
 
 ### 7.1 建立临时远端和两个工作副本
 
@@ -150,11 +150,11 @@ git -C $alice log --oneline --graph -4
 
 ### 7.3 进阶练习：两人修改同一行造成冲突
 
-本地 `git/demo/03-多人同时修改导致冲突.md` 还演示了：Alice 和 Bob 分别修改 `message.txt` 的同一行；Alice 先推送，Bob 的推送被拒绝。Bob 先 `git fetch origin`，再在自己的分支合并 `origin/main`，手工处理 `<<<<<<<`、`=======`、`>>>>>>>` 标记，运行验证后提交。不要直接选择“保留我的/对方的”来代替阅读实际内容。
+再试一个冲突场景：Alice 和 Bob 分别修改 `message.txt` 的同一行；Alice 先推送，Bob 的推送被拒绝。Bob 先 `git fetch origin`，再在自己的分支合并 `origin/main`，手工处理 `<<<<<<<`、`=======`、`>>>>>>>` 标记，运行验证后提交。不要直接选择“保留我的/对方的”来代替阅读实际内容。
 
 ## 8. 故障案例：密钥泄露与误删提交
 
 - **密钥已推送**：先在服务端吊销或轮换密钥，再用 `.gitignore` 和 `git rm --cached -- .env` 防止再次提交。删除文件并不能从旧提交、fork 或缓存中清除密钥；共享仓库的历史清理需要团队协调。
 - **误删本地提交**：先用 `git reflog` 找到原提交，再建立 `git branch rescue/recovered <commit-id>` 检查内容。不要在共享分支上直接使用 `reset --hard`。
 
-以上案例来自本地 `F:\MyBrain\git` 知识库。参考：[Git 分支文档](https://git-scm.com/docs/git-branch)、[Git 合并文档](https://git-scm.com/docs/git-merge)、[Git reflog 文档](https://git-scm.com/docs/git-reflog)。
+参考：[Git 分支文档](https://git-scm.com/docs/git-branch)、[Git 合并文档](https://git-scm.com/docs/git-merge)、[Git reflog 文档](https://git-scm.com/docs/git-reflog)。

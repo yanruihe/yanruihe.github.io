@@ -60,7 +60,7 @@ git add README.md
 git diff --cached
 git diff --cached --check
 git commit -m "docs: clarify setup steps"</code></pre><p>如果暂存错了，用 <code>git restore --staged -- README.md</code> 移出暂存区；工作区的编辑仍然保留。需要按代码块选择时可用 <code>git add -p</code>。</p></div>
-      <div class="kb-section"><h2 id="team-demo">7. 双人协作 Demo：分支、评审、合并与同步</h2><p>下面根据本地 Git 知识库中的功能分支和多人冲突 Demo 改写。使用 PowerShell，在临时目录中模拟远端、Alice 和 Bob 三个独立仓库；不会改动真实项目。</p>
+      <div class="kb-section"><h2 id="team-demo">7. 双人协作 Demo：分支、评审、合并与同步</h2><p>使用 PowerShell，在临时目录中模拟远端、Alice 和 Bob 三个独立仓库；不会改动真实项目。</p>
         <h3>7.1 建立临时远端和两个工作副本</h3>
         <pre class="kb-code"><code>$demoRoot = Join-Path $env:TEMP ("git-team-demo-" + [guid]::NewGuid().ToString("N"))
 $remote = Join-Path $demoRoot "remote.git"
@@ -98,10 +98,10 @@ git -C $alice pull --ff-only origin main
 git -C $alice log --oneline --graph -4</code></pre>
         <p>预期：Bob 的差异检查只看到 Alice 的一行新增内容；合并后 Alice 的 <code>main</code> 能快进到最新版本。真实 GitHub 团队一般由 Alice 发起 Pull Request、Bob 在网页上评审并合并，而不是让 Bob 直接推送受保护的 <code>main</code>；最后 Alice 同步主线。</p><p>也可以下载并运行仓库中的 <a href="https://github.com/yanruihe/yanruihe.github.io/blob/main/knowledge-base/examples/git/team-demo.ps1">PowerShell 演练脚本</a>；脚本会验证最终结果，并保留临时目录供检查。</p>
         <h3>7.3 进阶练习：两人修改同一行造成冲突</h3>
-        <p>本地多人冲突 Demo 还演示了：Alice 和 Bob 分别修改 <code>message.txt</code> 的同一行；Alice 先推送，Bob 的推送被拒绝。Bob 先 <code>git fetch origin</code>，再在自己的分支合并 <code>origin/main</code>，手工处理 <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>、<code>=======</code>、<code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> 标记，运行验证后提交。不要直接选择“保留我的/对方的”来代替阅读实际内容。</p>
+        <p>再试一个冲突场景：Alice 和 Bob 分别修改 <code>message.txt</code> 的同一行；Alice 先推送，Bob 的推送被拒绝。Bob 先 <code>git fetch origin</code>，再在自己的分支合并 <code>origin/main</code>，手工处理 <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>、<code>=======</code>、<code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> 标记，运行验证后提交。不要直接选择“保留我的/对方的”来代替阅读实际内容。</p>
       </div>
       <div class="kb-section"><h2 id="incidents">8. 故障案例：密钥泄露与误删提交</h2><ul><li><strong>密钥已推送</strong>：先在服务端吊销或轮换密钥，再用 <code>.gitignore</code> 和 <code>git rm --cached -- .env</code> 防止再次提交。删除文件并不能从旧提交、fork 或缓存中清除密钥；共享仓库的历史清理需要团队协调。</li><li><strong>误删本地提交</strong>：先用 <code>git reflog</code> 找到原提交，再建立 <code>git branch rescue/recovered &lt;commit-id&gt;</code> 检查内容。不要在共享分支上直接使用 <code>reset --hard</code>。</li></ul></div>
-      <div class="kb-section"><h2>参考资料</h2><p>以上案例整理自本地 <code>F:\MyBrain\git</code> 知识库。</p><p><a href="https://git-scm.com/docs/git-branch" target="_blank" rel="noopener">Git 分支文档</a> · <a href="https://git-scm.com/docs/git-merge" target="_blank" rel="noopener">Git 合并文档</a> · <a href="https://git-scm.com/docs/git-reflog" target="_blank" rel="noopener">Git reflog 文档</a></p><p><a href="/knowledge-base/">返回知识库总览</a></p></div>
+      <div class="kb-section"><h2>参考资料</h2><p><a href="https://git-scm.com/docs/git-branch" target="_blank" rel="noopener">Git 分支文档</a> · <a href="https://git-scm.com/docs/git-merge" target="_blank" rel="noopener">Git 合并文档</a> · <a href="https://git-scm.com/docs/git-reflog" target="_blank" rel="noopener">Git reflog 文档</a></p><p><a href="/knowledge-base/">返回知识库总览</a></p></div>
     </div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Git 知识库</div></div></footer></div>

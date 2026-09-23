@@ -63,12 +63,12 @@ bitbake &lt;recipe&gt; -c cleansstate
 # 查询已生成包的文件归属
 oe-pkgdata-util find-path /usr/bin/&lt;program&gt;</code></pre><p>遇到“找不到配方”先检查层是否加入、配方名是否正确；遇到“配置没有生效”先用 <code>bitbake -e</code> 确认变量来源；遇到增量构建异常再有针对性地清理任务。</p></div>
       <div class="kb-section"><h2 id="release">7. 可复现与发布</h2><ul><li>固定 manifest、层分支或 commit，而不是只记录模糊版本号。</li><li>记录 <code>MACHINE</code>、镜像目标、构建时间、构建主机和关键配置。</li><li>将自定义层、配方、补丁和 <code>conf</code> 配置放入 Git；不要提交 <code>tmp/</code>、<code>downloads/</code>、<code>sstate-cache/</code> 等生成目录。</li><li>发布前完成一次干净环境构建或 CI 验证，并保存镜像校验值。</li></ul></div>
-      <div class="kb-section"><h2 id="systemd-demo">8. 实际案例：把 systemd 服务加入镜像</h2><p>本案例整理自本地 <code>F:\MyBrain\yocto\examples\meta-demo</code> 和 systemd 服务笔记。网站仓库中已提供<a href="https://github.com/yanruihe/yanruihe.github.io/tree/main/knowledge-base/examples/meta-demo">可下载的 meta-demo 示例层</a>，不必依赖本地 <code>F:</code> 盘。它包含真正的 Layer、Recipe、脚本、unit 和 Image Recipe，而不只是单条 <code>IMAGE_INSTALL</code> 配置：</p><pre class="kb-code"><code>meta-demo/
+      <div class="kb-section"><h2 id="systemd-demo">8. 实际案例：把 systemd 服务加入镜像</h2><p>本案例包含 Layer、Recipe、脚本、unit 和 Image Recipe，而不只是单条 <code>IMAGE_INSTALL</code> 配置。完整文件可从<a href="https://github.com/yanruihe/yanruihe.github.io/tree/main/knowledge-base/examples/meta-demo">meta-demo 示例层</a>下载：</p><pre class="kb-code"><code>meta-demo/
 ├── conf/layer.conf
 ├── recipes-demo/hello-yocto/hello-yocto_1.0.bb
 ├── recipes-demo/hello-yocto/files/hello-yocto.sh
 ├── recipes-demo/hello-yocto/files/hello-yocto.service
-└── recipes-core/images/demo-image.bb</code></pre><p><code>hello-yocto_1.0.bb</code> 安装脚本和 unit，并声明自动启用服务；<code>demo-image.bb</code> 通过 <code>IMAGE_INSTALL:append = " hello-yocto"</code> 将包加入镜像。脚本每 10 秒更新 <code>/run/hello-yocto/status</code>。Recipe 的关键配置来自本地示例；<code>UNPACKDIR</code> 的用法应与所选 Yocto 分支保持一致：</p><pre class="kb-code"><code>SRC_URI = "file://hello-yocto.sh file://hello-yocto.service"
+└── recipes-core/images/demo-image.bb</code></pre><p><code>hello-yocto_1.0.bb</code> 安装脚本和 unit，并声明自动启用服务；<code>demo-image.bb</code> 通过 <code>IMAGE_INSTALL:append = " hello-yocto"</code> 将包加入镜像。脚本每 10 秒更新 <code>/run/hello-yocto/status</code>。Recipe 的关键配置如下；<code>UNPACKDIR</code> 的用法应与所选 Yocto 分支保持一致：</p><pre class="kb-code"><code>SRC_URI = "file://hello-yocto.sh file://hello-yocto.service"
 S = "${UNPACKDIR}"
 inherit allarch systemd
 
@@ -78,7 +78,7 @@ do_install() {
     install -m 0644 ${UNPACKDIR}/hello-yocto.service ${D}${systemd_system_unitdir}/hello-yocto.service
 }
 SYSTEMD_SERVICE:${PN} = "hello-yocto.service"
-SYSTEMD_AUTO_ENABLE = "enable"</code></pre><p>完整文件还应包含 <code>SUMMARY</code>、<code>LICENSE</code> 等元数据；正式项目使用真实许可证信息。复制本地示例层到工作区后，在 Linux/WSL2 中从包含 <code>poky</code> 的目录执行：</p><pre class="kb-code"><code>source poky/oe-init-build-env build-demo
+SYSTEMD_AUTO_ENABLE = "enable"</code></pre><p>完整文件还应包含 <code>SUMMARY</code>、<code>LICENSE</code> 等元数据；正式项目使用真实许可证信息。将示例层复制到工作区后，在 Linux/WSL2 中从包含 <code>poky</code> 的目录执行：</p><pre class="kb-code"><code>source poky/oe-init-build-env build-demo
 bitbake-layers add-layer /path/to/meta-demo
 # 在 conf/local.conf 中设置 INIT_MANAGER = "systemd"
 bitbake-layers show-recipes hello-yocto
@@ -86,7 +86,7 @@ bitbake demo-image</code></pre><p><code>/path/to/meta-demo</code> 必须换成�
 systemctl status hello-yocto.service
 cat /run/hello-yocto/status
 journalctl -u hello-yocto.service -b --no-pager</code></pre><p>正式项目应核对许可证、非 root 运行要求和目标 BSP 的 init 配置；示例中的 <code>LICENSE = "CLOSED"</code> 仅供本地演示。</p></div>
-      <div class="kb-section"><h2 id="missing-package">9. 排错案例：包已构建，但镜像中没有服务</h2><p>根据本地调试笔记，按“层 → 配方 → 包 → 镜像 → 运行时”逐层排查：</p><pre class="kb-code"><code>bitbake-layers show-layers
+      <div class="kb-section"><h2 id="missing-package">9. 排错案例：包已构建，但镜像中没有服务</h2><p>按“层 → 配方 → 包 → 镜像 → 运行时”逐层排查：</p><pre class="kb-code"><code>bitbake-layers show-layers
 bitbake-layers show-recipes hello-yocto
 bitbake -e demo-image | grep '^IMAGE_INSTALL='
 oe-pkgdata-util find-pkg hello-yocto</code></pre><p>若 Recipe 存在但 <code>IMAGE_INSTALL</code> 不含 <code>hello-yocto</code>，检查 Image Recipe 和包名；若镜像里已有包但服务不启动，检查 <code>INIT_MANAGER</code>、unit 安装路径、<code>SYSTEMD_SERVICE:${PN}</code>、<code>systemctl status</code> 与 <code>journalctl</code>。不要一开始就删除整个 <code>tmp/</code> 或共享缓存。</p></div>

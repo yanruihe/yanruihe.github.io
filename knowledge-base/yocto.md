@@ -115,9 +115,9 @@ oe-pkgdata-util find-path /usr/bin/<program>
 
 ## 8. 实际案例：把 systemd 服务加入镜像
 
-本案例整理自本地 `F:\MyBrain\yocto\examples\meta-demo` 和 `08-systemd服务案例.md`，包含真正的 Layer、Recipe、脚本、unit 和 Image Recipe，而不只是单条 `IMAGE_INSTALL` 配置。示例目录：
+本案例包含 Layer、Recipe、脚本、unit 和 Image Recipe，而不只是单条 `IMAGE_INSTALL` 配置。示例目录：
 
-网站仓库中已提供 [可下载的 meta-demo 示例层](examples/meta-demo/README.md)；完整文件可从该目录复制，不必依赖本地 `F:` 盘。
+网站仓库中已提供 [可下载的 meta-demo 示例层](examples/meta-demo/README.md)；完整文件可从该目录复制。
 
 ```text
 meta-demo/
@@ -128,9 +128,9 @@ meta-demo/
 └── recipes-core/images/demo-image.bb
 ```
 
-`hello-yocto_1.0.bb` 安装脚本和 unit，并声明自动启用服务；`demo-image.bb` 通过 `IMAGE_INSTALL:append = " hello-yocto"` 将包加入镜像。脚本每 10 秒更新 `/run/hello-yocto/status`。复制本地示例层到 Yocto 工作区后，在 Linux/WSL2 的构建环境中执行：
+`hello-yocto_1.0.bb` 安装脚本和 unit，并声明自动启用服务；`demo-image.bb` 通过 `IMAGE_INSTALL:append = " hello-yocto"` 将包加入镜像。脚本每 10 秒更新 `/run/hello-yocto/status`。
 
-Recipe 的关键配置来自本地示例；`UNPACKDIR` 的用法应与所选 Yocto 分支保持一致：
+Recipe 的关键配置如下；`UNPACKDIR` 的用法应与所选 Yocto 分支保持一致：
 
 ```bitbake
 SRC_URI = "file://hello-yocto.sh file://hello-yocto.service"
@@ -169,7 +169,7 @@ journalctl -u hello-yocto.service -b --no-pager
 
 ## 9. 排错案例：包已构建，但镜像中没有服务
 
-根据本地 `09-调试排错与构建加速.md`，按“层 → 配方 → 包 → 镜像 → 运行时”逐层排查：
+按“层 → 配方 → 包 → 镜像 → 运行时”逐层排查：
 
 ```bash
 bitbake-layers show-layers

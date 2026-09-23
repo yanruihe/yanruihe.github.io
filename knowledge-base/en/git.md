@@ -70,7 +70,7 @@ If you staged the wrong file, run `git restore --staged -- README.md`; the worki
 
 ## 7. Two-person collaboration demo: branch, review, merge, sync
 
-Adapted from the local `git/demo/02-功能分支开发并合并.md` and `git/demo/03-多人同时修改导致冲突.md` notes. Run this in PowerShell. It creates a temporary bare remote and two independent clones for Alice and Bob, leaving real repositories untouched.
+Run this in PowerShell. It creates a temporary bare remote and two independent clones for Alice and Bob, leaving real repositories untouched.
 
 ### 7.1 Create a temporary remote and two clones
 
@@ -121,11 +121,11 @@ The repository also provides a [PowerShell demo script](../examples/git/team-dem
 
 ### 7.3 Further practice: conflicting edits
 
-The local conflict demo has Alice and Bob edit the same line of `message.txt`. Alice pushes first; Bob's push is rejected. Bob fetches, merges `origin/main` into his branch, resolves the `<<<<<<<`, `=======`, and `>>>>>>>` markers by reading both changes, verifies the result, then commits. Do not blindly choose "ours" or "theirs."
+For further practice, have Alice and Bob edit the same line of `message.txt`. Alice pushes first; Bob's push is rejected. Bob fetches, merges `origin/main` into his branch, resolves the `<<<<<<<`, `=======`, and `>>>>>>>` markers by reading both changes, verifies the result, then commits. Do not blindly choose "ours" or "theirs."
 
 ## 8. Incident examples: leaked credential and lost commit
 
 - **Credential already pushed**: revoke or rotate it at the provider first. Add `.env` to `.gitignore` and use `git rm --cached -- .env` to stop tracking it. Deleting it in a new commit does not remove it from older history, forks, or caches. Coordinate any shared-history cleanup with the team.
 - **Lost local commit**: find it with `git reflog`, then create `git branch rescue/recovered <commit-id>` and inspect it. Do not reset a shared branch to recover a local commit.
 
-Adapted from the local `F:\MyBrain\git` knowledge base. References: [Git branches](https://git-scm.com/docs/git-branch), [Git merge](https://git-scm.com/docs/git-merge), and [Git reflog](https://git-scm.com/docs/git-reflog).
+References: [Git branches](https://git-scm.com/docs/git-branch), [Git merge](https://git-scm.com/docs/git-merge), and [Git reflog](https://git-scm.com/docs/git-reflog).
