@@ -1,5 +1,7 @@
 # Yocto 使用知识库
 
+本文以 Yocto Project 6.0.2（Wrynose）为目标版本。构建时让 Poky、BSP 与其他 Layer 使用相互兼容的 6.0.2 修订；只记录浮动分支名不足以复现构建。
+
 ## 1. 核心概念
 
 Yocto Project 不是一个固定发行版，而是一套用 OpenEmbedded 构建定制 Linux 系统的工具和元数据。日常工作中最重要的对象是：
@@ -20,12 +22,12 @@ Layer → Recipe → Package → Image
 
 ## 2. 初始化与第一次构建
 
-下面是通用流程，实际使用时必须让 `poky`、BSP 层和其他层处于相互兼容的发行版分支：
+下面是通用流程，实际使用时必须让 `poky`、BSP 层和其他层处于相互兼容的 6.0.2 修订：
 
 ```bash
 git clone https://git.yoctoproject.org/poky
 cd poky
-git checkout <compatible-release-branch>
+git checkout <matching-6.0.2-revision>
 source oe-init-build-env build
 
 bitbake-layers show-layers
@@ -119,6 +121,17 @@ oe-pkgdata-util find-path /usr/bin/<program>
 
 网站仓库中已提供 [可下载的 meta-demo 示例层](examples/meta-demo/README.md)；完整文件可从该目录复制。
 
+从包含 `poky` 的目录进入 6.0.2 构建环境，先确认初始化系统：
+
+```bash
+source poky/oe-init-build-env build-demo
+bitbake-getvar DISTRO
+bitbake-getvar INIT_MANAGER
+bitbake-getvar DISTRO_FEATURES
+```
+
+6.0.2 的 `nodistro` 默认使用 systemd，但 Poky 默认仍是 SysVinit；厂商发行版可能有自己的设置。若 `INIT_MANAGER` 已是 `systemd`，无需重复配置。只有当前项目不是 systemd、而目标镜像确实要用 systemd 时，才在产品 distro 配置（演练时可在 `conf/local.conf`）明确写入 `INIT_MANAGER = "systemd"`，然后重新构建镜像。
+
 ```text
 meta-demo/
 ├── conf/layer.conf
@@ -130,7 +143,19 @@ meta-demo/
 
 `hello-yocto_1.0.bb` 安装脚本和 unit，并声明自动启用服务；`demo-image.bb` 通过 `IMAGE_INSTALL:append = " hello-yocto"` 将包加入镜像。脚本每 10 秒更新 `/run/hello-yocto/status`。
 
-Recipe 的关键配置如下；`UNPACKDIR` 的用法应与所选 Yocto 分支保持一致：
+unit 中的 `ExecStart` 指向安装后的脚本，`WantedBy=multi-user.target` 指定开机启用时所属的 target：
+
+```ini
+[Service]
+Type=simple
+ExecStart=/usr/bin/hello-yocto.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Recipe 的关键配置如下：
 
 ```bitbake
 SRC_URI = "file://hello-yocto.sh file://hello-yocto.service"
@@ -146,24 +171,38 @@ SYSTEMD_SERVICE:${PN} = "hello-yocto.service"
 SYSTEMD_AUTO_ENABLE = "enable"
 ```
 
-完整文件还应包含 `SUMMARY`、`LICENSE` 等元数据；正式项目使用真实许可证信息。执行构建：
+完整文件还应包含 `SUMMARY`、`LICENSE` 等元数据；正式项目使用真实许可证信息。在上述构建环境中执行：
 
 ```bash
-source poky/oe-init-build-env build-demo
 bitbake-layers add-layer /path/to/meta-demo
-# 在 conf/local.conf 中设置 INIT_MANAGER = "systemd"
 bitbake-layers show-recipes hello-yocto
 bitbake demo-image
 ```
 
-这里 `/path/to/meta-demo` 必须换成真实路径；`INIT_MANAGER` 是配置文件内容，不是 shell 命令。构建成功后按机器和镜像格式选择 `runqemu` 参数，在目标系统内验证：
+这里 `/path/to/meta-demo` 必须换成真实路径。构建成功后按机器和镜像格式选择 `runqemu` 参数，或启动目标板。
+
+### 服务开机启动与手动启动
+
+`inherit systemd`、`SYSTEMD_SERVICE:${PN}`、`SYSTEMD_AUTO_ENABLE = "enable"`、unit 的 `[Install]` 节和镜像中的 `hello-yocto` 包共同决定新镜像能否开机启动服务。6.0.2 的 `systemd` class 默认也会启用服务，这里显式写出 `SYSTEMD_AUTO_ENABLE` 便于阅读。进入目标系统后验证：
 
 ```bash
+cat /proc/1/comm
 systemctl is-enabled hello-yocto.service
-systemctl status hello-yocto.service
+systemctl is-active hello-yocto.service
 cat /run/hello-yocto/status
 journalctl -u hello-yocto.service -b --no-pager
 ```
+
+`is-enabled` 应为 `enabled`，`is-active` 应为 `active`；`/run/hello-yocto/status` 中的时间应持续更新。若服务已安装但未运行，在目标机上执行：
+
+```bash
+systemctl start hello-yocto.service
+systemctl status hello-yocto.service
+# 仅在可写根文件系统的开发镜像上：开机自启并立即启动
+systemctl enable --now hello-yocto.service
+```
+
+正式镜像应通过 Recipe 启用服务，而不是依赖运行时手工修改。
 
 正式项目还应核对非 root 运行要求和目标 BSP 的 init 配置；示例中的 `LICENSE = "CLOSED"` 仅供本地演示。
 
@@ -180,4 +219,4 @@ oe-pkgdata-util find-pkg hello-yocto
 
 若 Recipe 存在但 `IMAGE_INSTALL` 不含 `hello-yocto`，检查 Image Recipe 和包名；若镜像里已有包但服务不启动，检查 `INIT_MANAGER`、unit 安装路径、`SYSTEMD_SERVICE:${PN}`、`systemctl status` 与 `journalctl`。不要一开始就删除整个 `tmp/` 或共享缓存。
 
-参考：[Yocto Project 概览](https://docs.yoctoproject.org/overview-manual/concepts.html)、[创建层](https://docs.yoctoproject.org/dev/dev-manual/layers.html)、[编写新配方](https://docs.yoctoproject.org/dev-manual/new-recipe.html)、[devtool](https://docs.yoctoproject.org/dev-manual/devtool.html)、[BitBake 文档](https://docs.yoctoproject.org/bitbake/dev/singleindex.html)。
+参考：[Yocto 6.0.2 初始化系统迁移说明](https://docs.yoctoproject.org/6.0.2/migration-guides/migration-6.0.html)、[systemd class](https://docs.yoctoproject.org/6.0.2/ref-manual/classes.html#systemd)、[6.0.2 变量说明](https://docs.yoctoproject.org/6.0.2/ref-manual/variables.html)、[创建层](https://docs.yoctoproject.org/6.0.2/dev-manual/layers.html)。
