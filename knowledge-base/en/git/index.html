@@ -21,7 +21,7 @@
     <div class="article-title"><span class="title-hover-animation">Git Knowledge Base</span></div>
     <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Git</span></div><div class="kb-meta">Reusable workflows for branches, commits, synchronization, and recovery</div></div></div>
     <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>Confirm the state before changing it; make the change recoverable before cleaning anything up.</p><p>This page covers Git workflows, branch management, commit reviews, and version recovery. For hands-on practice, jump to the <a href="#team-demo">two-person demo</a> or <a href="#incidents">incident examples</a>.</p></div>
+      <div class="kb-lead"><p>Confirm the state before changing it; make the change recoverable before cleaning anything up.</p><p>This page covers Git workflows, branch management, commit reviews, and version recovery. For hands-on practice, jump to the <a href="#team-demo">two-person demo</a> or <a href="#incidents">incident examples</a>.</p><p>New topics: <a href="#ssh">SSH setup</a> · <a href="#amend-message">message-only amend</a> · <a href="#shared-branch">shared branches</a> · <a href="#force-with-lease">remote replacement</a> · <a href="#dates">Git dates</a>.</p></div>
       <div class="kb-section"><h2 id="model">1. How Git saves and uploads changes</h2><p>Suppose you edit <code>README.md</code>. The file is not automatically uploaded to GitHub. It moves through four steps:</p><ol><li><strong>Working tree</strong>: you edit the file on your computer; the change is not yet a Git commit.</li><li><strong>Staging area</strong>: <code>git add README.md</code> selects the content for the next commit.</li><li><strong>Local repository</strong>: <code>git commit -m &quot;docs: update README&quot;</code> records a commit on your computer.</li><li><strong>Remote repository</strong>: <code>git push</code> uploads the commit to GitHub.</li></ol><pre class="kb-code"><code>git status
 git add README.md
 git commit -m "docs: update README"
@@ -101,7 +101,50 @@ git -C $alice log --oneline --graph -4</code></pre>
         <p>For further practice, have Alice and Bob edit the same line of <code>message.txt</code>. Alice pushes first; Bob's push is rejected. Bob fetches, merges <code>origin/main</code> into his branch, resolves the <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code>, and <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> markers by reading both changes, verifies the result, then commits. Do not blindly choose “ours” or “theirs.”</p>
       </div>
       <div class="kb-section"><h2 id="incidents">8. Incident examples: leaked credential and lost commit</h2><ul><li><strong>Credential already pushed</strong>: revoke or rotate it at the provider first. Add <code>.env</code> to <code>.gitignore</code> and use <code>git rm --cached -- .env</code> to stop tracking it. Deleting it in a new commit does not remove it from older history, forks, or caches. Coordinate shared-history cleanup with the team.</li><li><strong>Lost local commit</strong>: find it with <code>git reflog</code>, then create <code>git branch rescue/recovered &lt;commit-id&gt;</code> and inspect it. Do not reset a shared branch to recover a local commit.</li></ul></div>
-      <div class="kb-section"><h2>References</h2><p><a href="https://git-scm.com/docs/git-branch" target="_blank" rel="noopener">Git branches</a> · <a href="https://git-scm.com/docs/git-merge" target="_blank" rel="noopener">Git merge</a> · <a href="https://git-scm.com/docs/git-reflog" target="_blank" rel="noopener">Git reflog</a></p><p><a href="/knowledge-base/en/">Back to Knowledge Base</a></p></div>
+      <div class="kb-section"><h2 id="ssh">9. GitHub SSH setup and quick start</h2><p>Run these commands in Windows PowerShell. Check for an existing public key first. If the default key path is already in use, choose another filename instead of overwriting it:</p><pre class="kb-code"><code>Get-ChildItem "$HOME/.ssh" -Filter "*.pub" -ErrorAction SilentlyContinue
+ssh-keygen -t ed25519 -C "you@example.com"
+Get-Content "$HOME/.ssh/id_ed25519.pub"</code></pre><p>Add only the <code>.pub</code> public key to GitHub Settings → SSH and GPG keys; never upload the private key. Adjust the path if you chose a custom filename, and add the private key to <code>ssh-agent</code> if needed. On the first connection, compare the host fingerprint with GitHub's published fingerprint before accepting it:</p><pre class="kb-code"><code>ssh -T git@github.com
+git remote -v
+git remote set-url origin git@github.com:OWNER/REPO.git
+git remote -v</code></pre><p>Replace <code>OWNER/REPO</code> with the actual repository. An existing SSH remote does not need to be changed. For multiple accounts, an alias in <code>$HOME/.ssh/config</code> can select a specific key:</p><pre class="kb-code"><code>Host github-work
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_work
+  IdentitiesOnly yes</code></pre><p>Then use <code>git@github-work:TEAM/REPO.git</code> as the remote and test with <code>ssh -T git@github-work</code>. Short workflow:</p><pre class="kb-code"><code>git clone git@github.com:OWNER/REPO.git
+cd REPO
+git switch -c feature/quick-note
+# Edit README.md
+git add README.md
+git commit -m "docs: update README"
+git push -u origin HEAD</code></pre><p>Then open a pull request.</p></div>
+      <div class="kb-section"><h2 id="amend-message">10. Change only the last commit message</h2><pre class="kb-code"><code>git status -sb
+git show -s --format='%h %s' HEAD
+git commit --amend --only -m "docs: clarify setup"
+git show -s --format='%h %s' HEAD</code></pre><p><code>--only</code> changes the message without including unrelated staged changes; <code>--amend</code> creates a new commit ID. Use it only on an unpublished commit or a branch whose history rewrite was agreed with the team. Do not force-push shared <code>main</code> just to fix wording.</p></div>
+      <div class="kb-section"><h2 id="shared-branch">11. Several people on the same branch</h2><p>Prefer short-lived personal branches and pull requests. On a shared feature branch, do not rebase or amend commits that teammates may have pulled. If Bob pushed first and Alice's ordinary push is rejected, Alice should inspect and integrate remote changes:</p><pre class="kb-code"><code>git fetch origin
+git log --oneline --left-right --graph HEAD...origin/feature/shared
+git merge origin/feature/shared</code></pre><p>If the merge succeeds, run project tests before <code>git push origin HEAD:feature/shared</code>. If it stops on conflicts, edit the files, remove conflict markers, and run tests before continuing:</p><pre class="kb-code"><code>git status
+git add path/to/resolved-file
+git commit
+git push origin HEAD:feature/shared</code></pre><p>If there are no conflicts, Git normally completes the merge; do not run an extra <code>git commit</code>. If the remote advances again, fetch and integrate again rather than overwriting Bob's commit.</p></div>
+      <div class="kb-section"><h2 id="force-with-lease">12. Replace a remote branch: only a coordinated personal branch</h2><p>A forced update can detach the remote's previous commits from its branch. Coordinate with anyone using it and check its exact remote commit ID. Never apply this example to <code>main</code>, <code>release/*</code>, or a protected branch. This PowerShell example targets only <code>feature/my-change</code>:</p><pre class="kb-code"><code>git status -sb
+if ((git branch --show-current) -ne "feature/my-change") { throw "Switch to feature/my-change first" }
+git fetch origin
+git log --oneline --left-right --graph HEAD...origin/feature/my-change
+git branch backup/feature-my-change origin/feature/my-change
+$remoteLine = git ls-remote origin refs/heads/feature/my-change
+$expected = ($remoteLine -split "\s+")[0]
+if (-not $expected) { throw "Remote branch not found" }
+git push "--force-with-lease=refs/heads/feature/my-change:$expected" origin HEAD:refs/heads/feature/my-change</code></pre><p>The push succeeds only if the remote still points at <code>$expected</code>. If someone pushes after your check, Git rejects it. Reinspect the branch; do not automatically retry a force push. A new branch and pull request are preferable, while bare <code>--force</code> lacks this protection.</p></div>
+      <div class="kb-section"><h2 id="dates">13. Inspect and change Git timestamps</h2><p>Commits have an <code>AuthorDate</code> (when the author wrote the change) and a <code>CommitDate</code> (when the commit object was created). A working-tree file's filesystem modification time is not preserved as one repository-wide Git timestamp. <code>git log</code> reports commit history, not the file's current filesystem mtime.</p><pre class="kb-code"><code>git log -1 --format=fuller
+git log -1 --date=iso-strict --format='%h %ad %s' -- path/to/file</code></pre><p>To change both dates of the last <strong>unshared</strong> commit in PowerShell, set the committer date in the environment and the author date with <code>--date</code>. Confirm the timestamp, time zone, and target commit first:</p><pre class="kb-code"><code>$env:GIT_COMMITTER_DATE = "2026-09-23T10:00:00+08:00"
+try {
+    git commit --amend --only --no-edit --date="2026-09-23T10:00:00+08:00"
+} finally {
+    Remove-Item Env:GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
+}
+git log -1 --format=fuller</code></pre><p>This changes the commit ID, not filesystem modification times. To <strong>rewrite timestamps across multiple commits</strong>, first work in an isolated backup and plan how branches, tags, signatures, CI, and collaborators will be handled. On an isolated branch, <code>git rebase -i --root</code> lets you mark commits <code>edit</code>; amend each date as above, then run <code>git rebase --continue</code>. Editing an older commit changes the IDs of all its descendants. Merge-heavy histories need extra care; do not run a blanket rewrite or force-push directly in a shared repository.</p></div>
+      <div class="kb-section"><h2>References</h2><p><a href="https://docs.github.com/en/authentication/connecting-to-github-with-ssh" target="_blank" rel="noopener">GitHub SSH setup</a> · <a href="https://git-scm.com/docs/git-commit" target="_blank" rel="noopener">Git commit</a> · <a href="https://git-scm.com/docs/git-push" target="_blank" rel="noopener">Git push and force-with-lease</a> · <a href="https://git-scm.com/docs/git-rebase" target="_blank" rel="noopener">Git rebase</a></p><p><a href="/knowledge-base/en/">Back to Knowledge Base</a></p></div>
     </div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Git Knowledge Base</div></div></footer></div>

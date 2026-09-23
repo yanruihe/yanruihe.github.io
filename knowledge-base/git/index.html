@@ -21,7 +21,7 @@
     <div class="article-title"><span class="title-hover-animation">Git 知识库</span></div>
     <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Git</span></div><div class="kb-meta">可复用的分支、提交、同步与恢复流程</div></div></div>
     <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>先确认状态，再改变状态；先保证可恢复，再做清理。</p><p>本页面介绍 Git 的日常使用、分支管理、提交评审与版本恢复。想动手练习，可直接跳到<a href="#team-demo">双人协作 Demo</a>和<a href="#incidents">故障案例</a>。</p></div>
+      <div class="kb-lead"><p>先确认状态，再改变状态；先保证可恢复，再做清理。</p><p>本页面介绍 Git 的日常使用、分支管理、提交评审与版本恢复。想动手练习，可直接跳到<a href="#team-demo">双人协作 Demo</a>和<a href="#incidents">故障案例</a>。</p><p>新增专题：<a href="#ssh">SSH 配置</a> · <a href="#amend-message">仅改提交信息</a> · <a href="#shared-branch">多人同分支</a> · <a href="#force-with-lease">覆盖远端分支</a> · <a href="#dates">Git 时间</a>。</p></div>
       <div class="kb-section"><h2 id="model">1. Git 如何保存和上传修改</h2><p>例如你修改了 <code>README.md</code>，文件不会自动上传到 GitHub。它会经过下面四步：</p><ol><li><strong>工作区</strong>：你在电脑上编辑文件，改动还没有成为 Git 的版本记录。</li><li><strong>暂存区</strong>：运行 <code>git add README.md</code>，选中这次准备提交的内容。</li><li><strong>本地仓库</strong>：运行 <code>git commit -m &quot;docs: update README&quot;</code>，在电脑上保存一条提交记录。</li><li><strong>远程仓库</strong>：运行 <code>git push</code>，把已提交的记录上传到 GitHub。</li></ol><pre class="kb-code"><code>git status
 git add README.md
 git commit -m "docs: update README"
@@ -101,7 +101,50 @@ git -C $alice log --oneline --graph -4</code></pre>
         <p>再试一个冲突场景：Alice 和 Bob 分别修改 <code>message.txt</code> 的同一行；Alice 先推送，Bob 的推送被拒绝。Bob 先 <code>git fetch origin</code>，再在自己的分支合并 <code>origin/main</code>，手工处理 <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>、<code>=======</code>、<code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> 标记，运行验证后提交。不要直接选择“保留我的/对方的”来代替阅读实际内容。</p>
       </div>
       <div class="kb-section"><h2 id="incidents">8. 故障案例：密钥泄露与误删提交</h2><ul><li><strong>密钥已推送</strong>：先在服务端吊销或轮换密钥，再用 <code>.gitignore</code> 和 <code>git rm --cached -- .env</code> 防止再次提交。删除文件并不能从旧提交、fork 或缓存中清除密钥；共享仓库的历史清理需要团队协调。</li><li><strong>误删本地提交</strong>：先用 <code>git reflog</code> 找到原提交，再建立 <code>git branch rescue/recovered &lt;commit-id&gt;</code> 检查内容。不要在共享分支上直接使用 <code>reset --hard</code>。</li></ul></div>
-      <div class="kb-section"><h2>参考资料</h2><p><a href="https://git-scm.com/docs/git-branch" target="_blank" rel="noopener">Git 分支文档</a> · <a href="https://git-scm.com/docs/git-merge" target="_blank" rel="noopener">Git 合并文档</a> · <a href="https://git-scm.com/docs/git-reflog" target="_blank" rel="noopener">Git reflog 文档</a></p><p><a href="/knowledge-base/">返回知识库总览</a></p></div>
+      <div class="kb-section"><h2 id="ssh">9. GitHub SSH 配置与快速使用</h2><p>以下命令在 Windows PowerShell 中执行。先检查是否已有公钥；生成新密钥时，若默认路径已有密钥，不要覆盖它，改用另一个文件名：</p><pre class="kb-code"><code>Get-ChildItem "$HOME/.ssh" -Filter "*.pub" -ErrorAction SilentlyContinue
+ssh-keygen -t ed25519 -C "you@example.com"
+Get-Content "$HOME/.ssh/id_ed25519.pub"</code></pre><p>只把 <code>.pub</code> 公钥添加到 GitHub 的 Settings → SSH and GPG keys；绝不上传私钥。自定义文件名时相应修改路径，按需把私钥加入 <code>ssh-agent</code>。首次连接前核对 GitHub 官方公布的主机指纹，不能盲目接受：</p><pre class="kb-code"><code>ssh -T git@github.com
+git remote -v
+git remote set-url origin git@github.com:OWNER/REPO.git
+git remote -v</code></pre><p>将 <code>OWNER/REPO</code> 换成实际仓库；已有 SSH 远端就不必再设置。多账号可在 <code>$HOME/.ssh/config</code> 中指定别名和密钥：</p><pre class="kb-code"><code>Host github-work
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_work
+  IdentitiesOnly yes</code></pre><p>此时远端写成 <code>git@github-work:TEAM/REPO.git</code>，用 <code>ssh -T git@github-work</code> 测试。快速流程：</p><pre class="kb-code"><code>git clone git@github.com:OWNER/REPO.git
+cd REPO
+git switch -c feature/quick-note
+# 修改 README.md
+git add README.md
+git commit -m "docs: update README"
+git push -u origin HEAD</code></pre><p>随后发起 Pull Request。</p></div>
+      <div class="kb-section"><h2 id="amend-message">10. 只修改最后一次 commit 信息</h2><pre class="kb-code"><code>git status -sb
+git show -s --format='%h %s' HEAD
+git commit --amend --only -m "docs: clarify setup"
+git show -s --format='%h %s' HEAD</code></pre><p><code>--only</code> 只改最后一次提交的说明，不把已暂存的其他文件一起提交；<code>--amend</code> 会生成新的 commit ID。只适用于尚未共享、或已与团队约定可以改写的分支。不要为了改文案而强推共享 <code>main</code>。</p></div>
+      <div class="kb-section"><h2 id="shared-branch">11. 多人同时操作同一分支</h2><p>优先每人使用自己的短期分支和 Pull Request。多人共用功能分支时，不要对其他人可能已拉取的提交做 <code>rebase</code> 或 <code>amend</code>。如果 Bob 已先推送，而 Alice 的普通 <code>git push</code> 被拒绝，Alice 应先检查并整合远端改动：</p><pre class="kb-code"><code>git fetch origin
+git log --oneline --left-right --graph HEAD...origin/feature/shared
+git merge origin/feature/shared</code></pre><p>无冲突时，运行项目测试后再执行 <code>git push origin HEAD:feature/shared</code>。如果 merge 因冲突中断，先编辑文件、删除冲突标记并运行测试，再执行：</p><pre class="kb-code"><code>git status
+git add path/to/resolved-file
+git commit
+git push origin HEAD:feature/shared</code></pre><p>无冲突时 merge 通常直接完成，不要额外执行 <code>git commit</code>。若远端再次前进，重复 fetch、检查和整合，不能强推覆盖 Bob 的提交。</p></div>
+      <div class="kb-section"><h2 id="force-with-lease">12. 覆盖远端分支：仅限已协调的个人分支</h2><p>覆盖会让远端原有提交脱离分支。先与使用该分支的人确认并检查准确的远端提交 ID；不要对 <code>main</code>、<code>release/*</code> 或受保护分支套用。以下 PowerShell 示例只针对 <code>feature/my-change</code>：</p><pre class="kb-code"><code>git status -sb
+if ((git branch --show-current) -ne "feature/my-change") { throw "Switch to feature/my-change first" }
+git fetch origin
+git log --oneline --left-right --graph HEAD...origin/feature/my-change
+git branch backup/feature-my-change origin/feature/my-change
+$remoteLine = git ls-remote origin refs/heads/feature/my-change
+$expected = ($remoteLine -split "\s+")[0]
+if (-not $expected) { throw "Remote branch not found" }
+git push "--force-with-lease=refs/heads/feature/my-change:$expected" origin HEAD:refs/heads/feature/my-change</code></pre><p>只有远端仍指向 <code>$expected</code> 时才会更新；有人在检查后推送，Git 就会拒绝。拒绝后重新检查，不能自动重试强推。优先选新分支加 Pull Request；裸 <code>--force</code> 没有上述保护。</p></div>
+      <div class="kb-section"><h2 id="dates">13. 查看与修改 Git 时间</h2><p>提交有 <code>AuthorDate</code>（作者写出改动）和 <code>CommitDate</code>（提交对象形成）两个时间。文件系统的“最后修改时间”是工作区属性，不由 Git 提交历史统一保存；<code>git log</code> 查的是提交时间。</p><pre class="kb-code"><code>git log -1 --format=fuller
+git log -1 --date=iso-strict --format='%h %ad %s' -- path/to/file</code></pre><p>只修改当前分支最后一条<strong>未共享</strong>提交的两个时间，可在 PowerShell 中设置提交者时间，并用 <code>--date</code> 设置作者时间。先确认日期、时区和目标提交：</p><pre class="kb-code"><code>$env:GIT_COMMITTER_DATE = "2026-09-23T10:00:00+08:00"
+try {
+    git commit --amend --only --no-edit --date="2026-09-23T10:00:00+08:00"
+} finally {
+    Remove-Item Env:GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
+}
+git log -1 --format=fuller</code></pre><p>这会改变 commit ID，不改文件系统的修改时间。若要<strong>整体改写多条提交的时间</strong>，先在隔离副本备份并确定分支、标签、签名、CI 和协作者同步方案；可在独立分支用 <code>git rebase -i --root</code> 逐条标记 <code>edit</code>，每次按上例 amend 日期后 <code>git rebase --continue</code>。改动旧提交会连带改写其后所有提交的 ID，含 merge 的历史还需特别处理；不要在共享仓库直接批量执行或强推。</p></div>
+      <div class="kb-section"><h2>参考资料</h2><p><a href="https://docs.github.com/en/authentication/connecting-to-github-with-ssh" target="_blank" rel="noopener">GitHub SSH 配置</a> · <a href="https://git-scm.com/docs/git-commit" target="_blank" rel="noopener">Git commit 文档</a> · <a href="https://git-scm.com/docs/git-push" target="_blank" rel="noopener">Git push 与 force-with-lease</a> · <a href="https://git-scm.com/docs/git-rebase" target="_blank" rel="noopener">Git rebase 文档</a></p><p><a href="/knowledge-base/">返回知识库总览</a></p></div>
     </div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Git 知识库</div></div></footer></div>

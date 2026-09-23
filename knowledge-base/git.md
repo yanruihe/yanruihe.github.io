@@ -157,4 +157,120 @@ git -C $alice log --oneline --graph -4
 - **密钥已推送**：先在服务端吊销或轮换密钥，再用 `.gitignore` 和 `git rm --cached -- .env` 防止再次提交。删除文件并不能从旧提交、fork 或缓存中清除密钥；共享仓库的历史清理需要团队协调。
 - **误删本地提交**：先用 `git reflog` 找到原提交，再建立 `git branch rescue/recovered <commit-id>` 检查内容。不要在共享分支上直接使用 `reset --hard`。
 
-参考：[Git 分支文档](https://git-scm.com/docs/git-branch)、[Git 合并文档](https://git-scm.com/docs/git-merge)、[Git reflog 文档](https://git-scm.com/docs/git-reflog)。
+## 9. GitHub SSH 配置与快速使用
+
+以下命令在 Windows PowerShell 中执行。先检查是否已有可用公钥；生成新密钥时，若默认路径已有密钥，不要覆盖它，改用另一个文件名：
+
+```powershell
+Get-ChildItem "$HOME/.ssh" -Filter "*.pub" -ErrorAction SilentlyContinue
+ssh-keygen -t ed25519 -C "you@example.com"
+Get-Content "$HOME/.ssh/id_ed25519.pub"
+```
+
+只把 `.pub` 公钥添加到 GitHub 的 **Settings → SSH and GPG keys**；绝不上传私钥。若使用了自定义文件名，相应地修改读取路径，并按需把私钥加入 `ssh-agent`。首次连接前核对 GitHub 官方公布的主机指纹，不能盲目接受提示：
+
+```powershell
+ssh -T git@github.com
+git remote -v
+git remote set-url origin git@github.com:OWNER/REPO.git
+git remote -v
+```
+
+将 `OWNER/REPO` 换成实际仓库；已有 SSH 远端就不必再次设置。多账号可在 `$HOME/.ssh/config` 中指定别名和密钥：
+
+```sshconfig
+Host github-work
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_work
+  IdentitiesOnly yes
+```
+
+此时远端写成 `git@github-work:TEAM/REPO.git`，测试命令改为 `ssh -T git@github-work`。完成配置后，最短的分支使用流程：
+
+```bash
+git clone git@github.com:OWNER/REPO.git
+cd REPO
+git switch -c feature/quick-note
+# 修改 README.md
+git add README.md
+git commit -m "docs: update README"
+git push -u origin HEAD
+```
+
+然后发起 Pull Request。这里的 `OWNER/REPO`、`REPO` 和文件名要换成实际值。
+
+## 10. 只修改最后一次 commit 信息
+
+```bash
+git status -sb
+git show -s --format='%h %s' HEAD
+git commit --amend --only -m "docs: clarify setup"
+git show -s --format='%h %s' HEAD
+```
+
+`--only` 表示只改最后一次提交的说明，不把已暂存的其他文件一起提交；`--amend` 会生成新的 commit ID。只适用于尚未共享、或已与团队约定可以改写的分支。已经发布到共享 `main` 的提交不要为了改文案而强推。
+
+## 11. 多人同时操作同一分支
+
+每人优先使用自己的短期分支并通过 Pull Request 评审；多人共用同一功能分支时，不要对其他人已拉取的提交做 `rebase` 或 `amend`。如果 Bob 已经先推送，而 Alice 的普通 `git push` 被拒绝，Alice 应先检查并整合远端改动：
+
+```bash
+git fetch origin
+git log --oneline --left-right --graph HEAD...origin/feature/shared
+git merge origin/feature/shared
+```
+
+无冲突时，运行项目测试后再执行 `git push origin HEAD:feature/shared`。如果 merge 因冲突中断，先编辑文件、删除冲突标记、运行测试，再继续：
+
+```bash
+git status
+git add path/to/resolved-file
+git commit
+git push origin HEAD:feature/shared
+```
+
+仅在 merge 发生冲突时才需要手工 `git add` / `git commit`；无冲突时 `git merge` 通常会直接完成。合并前检查双方独有提交，合并后运行项目测试。若远端再次前进，重复 fetch、检查和整合，而不是直接强推覆盖 Bob 的提交。
+
+## 12. 覆盖远端分支：仅限已协调的个人分支
+
+覆盖会让远端原有提交脱离分支。先与使用该分支的人确认，并检查远端的准确提交 ID；不要对 `main`、`release/*` 或受保护分支套用此流程。以下 PowerShell 示例只针对 `feature/my-change`：
+
+```powershell
+git status -sb
+if ((git branch --show-current) -ne "feature/my-change") { throw "Switch to feature/my-change first" }
+git fetch origin
+git log --oneline --left-right --graph HEAD...origin/feature/my-change
+git branch backup/feature-my-change origin/feature/my-change
+$remoteLine = git ls-remote origin refs/heads/feature/my-change
+$expected = ($remoteLine -split "\s+")[0]
+if (-not $expected) { throw "Remote branch not found" }
+git push "--force-with-lease=refs/heads/feature/my-change:$expected" origin HEAD:refs/heads/feature/my-change
+```
+
+命令只在远端仍指向 `$expected` 时更新该分支；如果有人在检查后又推送，Git 会拒绝。拒绝后重新检查，不能自动重试强推。优先选择新分支加 Pull Request；裸 `--force` 没有上述保护。
+
+## 13. 查看与修改 Git 时间
+
+Git 提交有两个时间：`AuthorDate`（作者写出改动）和 `CommitDate`（提交对象形成）。文件系统的“最后修改时间”是工作区文件属性，不由 Git 提交历史统一保存；`git log` 查的是提交时间。
+
+```bash
+git log -1 --format=fuller
+git log -1 --date=iso-strict --format='%h %ad %s' -- path/to/file
+```
+
+只修改当前分支最后一条**未共享**提交的两个时间，可在 PowerShell 中设置提交者时间，并用 `--date` 设置作者时间。运行前确保日期、时区和目标提交正确：
+
+```powershell
+$env:GIT_COMMITTER_DATE = "2026-09-23T10:00:00+08:00"
+try {
+    git commit --amend --only --no-edit --date="2026-09-23T10:00:00+08:00"
+} finally {
+    Remove-Item Env:GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
+}
+git log -1 --format=fuller
+```
+
+这会改变 commit ID，但不改文件系统的修改时间。若要**整体改写多条提交的时间**，应先在隔离副本备份并确认分支、标签、签名、CI 和协作者同步方案；可在独立分支用交互式 `git rebase -i --root` 逐条标记 `edit`，每次按上例 amend 日期后 `git rebase --continue`。改动旧提交会连带改写其后所有提交的 ID，含 merge 的历史还需特别处理；不要在共享仓库直接批量执行或强推。
+
+参考：[GitHub SSH 配置](https://docs.github.com/en/authentication/connecting-to-github-with-ssh)、[Git commit 文档](https://git-scm.com/docs/git-commit)、[Git push 与 force-with-lease](https://git-scm.com/docs/git-push)、[Git rebase 文档](https://git-scm.com/docs/git-rebase)。
