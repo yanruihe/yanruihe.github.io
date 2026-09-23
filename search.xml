@@ -26,6 +26,11 @@
     <content><![CDATA[Yocto Project 6.0.2 Wrynose 从零构建 qemux86-64 镜像，添加 meta-demo layer 和 systemd 服务并在 QEMU 验证。]]></content>
   </entry>
   <entry>
+    <title>V4L2 源码深度解析：从 video_device 到 /dev/videoX</title>
+    <url>/posts/v4l2-video-device-lifecycle/</url>
+    <content><![CDATA[Linux v6.1 V4L2 video_device，节点编号 num/minor/index，__video_register_device，cdev，v4l2_open，ioctl 分发，video_unregister_device，引用计数与最终释放。]]></content>
+  </entry>
+  <entry>
     <title>Knowledge Base</title>
     <url>/knowledge-base/en/</url>
     <content><![CDATA[Git and Yocto knowledge base. Capture context, reduce to a minimal reproduction, verify, commit, and publish.]]></content>
@@ -49,5 +54,10 @@
     <title>Embedded Linux from scratch: Yocto</title>
     <url>/posts/en/yocto-from-zero/</url>
     <content><![CDATA[Yocto Project 6.0.2 Wrynose qemux86-64 image, meta-demo layer, systemd service, QEMU, and hardware porting.]]></content>
+  </entry>
+  <entry>
+    <title>V4L2 Internals: The Lifecycle from video_device to /dev/videoX</title>
+    <url>/posts/en/v4l2-video-device-lifecycle/</url>
+    <content><![CDATA[Linux 6.1 V4L2 node numbering, registration, cdev, v4l2_open, ioctl dispatch, unregister, references, and final release.]]></content>
   </entry>
 </search>

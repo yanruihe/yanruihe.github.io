@@ -6,10 +6,13 @@
     'Git 知识库': 'Git Knowledge Base',
     '从零构建嵌入式 Linux：Buildroot': 'Embedded Linux from scratch: Buildroot',
     '从零构建嵌入式 Linux：Yocto': 'Embedded Linux from scratch: Yocto',
+    'V4L2 源码深度解析：从 video_device 到 /dev/videoX': 'V4L2 Internals: The Lifecycle from video_device to /dev/videoX',
     '最新博文': 'Latest articles',
     '2 篇文章': '2 articles',
+    '3 篇文章': '3 articles',
     '用 Buildroot 生成工具链、内核与根文件系统，并在 QEMU 中启动。': 'Build a toolchain, kernel, and root filesystem with Buildroot and boot them in QEMU.',
     '用 Yocto 6.0.2 构建镜像，并把 systemd 服务加入系统。': 'Build a Yocto 6.0.2 image and include a systemd service.',
+    '追踪 video_device 注册、open 分发、注销与引用计数释放。': 'Trace video_device registration, open dispatch, unregister, and refcount-based release.',
     '知识库总览': 'Knowledge Base Overview',
     '黄色的森林分出两条路': 'Two roads diverged in a yellow wood',
     '我选择人迹更少的那一条，从此决定我一生的道路。': 'I took the one less traveled by, and that has made all the difference.',
@@ -53,6 +56,7 @@
     '/knowledge-base/yocto/': '/knowledge-base/en/yocto/',
     '/posts/buildroot-from-zero/': '/posts/en/buildroot-from-zero/',
     '/posts/yocto-from-zero/': '/posts/en/yocto-from-zero/',
+    '/posts/v4l2-video-device-lifecycle/': '/posts/en/v4l2-video-device-lifecycle/',
   };
   var chinesePages = {
     '/knowledge-base/en/': '/knowledge-base/',
@@ -60,6 +64,7 @@
     '/knowledge-base/en/yocto/': '/knowledge-base/yocto/',
     '/posts/en/buildroot-from-zero/': '/posts/buildroot-from-zero/',
     '/posts/en/yocto-from-zero/': '/posts/yocto-from-zero/',
+    '/posts/en/v4l2-video-device-lifecycle/': '/posts/v4l2-video-device-lifecycle/',
   };
 
   function getStoredLanguage() {

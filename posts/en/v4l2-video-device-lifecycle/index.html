@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="A Linux 6.1 source walkthrough of V4L2 video_device registration, open and ioctl dispatch, unregister, and reference-counted release."><link rel="canonical" href="https://yanruihe.github.io/posts/en/v4l2-video-device-lifecycle/"><link rel="alternate" hreflang="zh-CN" href="https://yanruihe.github.io/posts/v4l2-video-device-lifecycle/"><link rel="alternate" hreflang="en" href="https://yanruihe.github.io/posts/en/v4l2-video-device-lifecycle/"><title>V4L2 Internals: The Lifecycle from video_device to /dev/videoX | Rui&#39;s Blog</title><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/i18n.css"><link rel="stylesheet" href="/css/knowledge-base.css"><link rel="shortcut icon" href="/images/logo.jpg"></head>
+<body><main class="page-container"><div class="page-main-content"><div class="page-main-content-top"><header class="header-wrapper"><div class="header-content"><div class="left"><a class="logo-image" href="/"><img src="/images/logo.jpg" alt="Rui"></a><a class="logo-title" href="/">Rui&#39;s Blog</a></div><div class="right"><div class="pc"><ul class="menu-list"><li class="menu-item"><a href="/">Home</a></li><li class="menu-item"><a href="/archives">Archives</a></li><li class="menu-item"><a href="/knowledge-base/en/">Knowledge Base</a></li><li class="menu-item"><a href="/about">About</a></li></ul></div></div></div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
+<div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container"><div class="article-title"><span class="title-hover-animation">V4L2 Internals: The Lifecycle from <code>video_device</code> to <code>/dev/videoX</code></span></div><div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">V4L2</span></div><div class="kb-meta">2026-09-23 · V4L2 · Linux 6.1</div></div></div><div class="article-content keep-markdown-body"><div class="kb-lead"><p>Starting with an application's <code>open(&quot;/dev/video0&quot;)</code>, this article follows how the Linux 6.1 V4L2 core assigns node numbers, registers a character device, dispatches file operations, and waits for the last reference before reclaiming an unregistered object. The main source is <code>drivers/media/v4l2-core/v4l2-dev.c</code>. Image-format negotiation, videobuf2 queues, and sensor drivers are covered only where their boundaries matter.</p>
+<p><a href="#follow-one-open-from-userspace">1. Follow one open from userspace</a> · <a href="#separate-the-node-its-parent-and-one-open-file">2. Separate the node, its parent, and one open file</a> · <a href="#the-8-in-devvideo8-is-not-necessarily-minor-8">3. The 8 in /dev/video8 is not necessarily minor 8</a> · <a href="#core-initialization-does-not-create-every-video-node">4. Core initialization does not create every video node</a> · <a href="#registration-publishes-the-node-in-stages">5. Registration publishes the node in stages</a> · <a href="#the-open-path-lookup-validation-and-refcounting-share-one-critical-section">6. The open path: lookup, validation, and refcounting share one critical section</a> · <a href="#what-the-file-operation-wrappers-do-and-do-not-do">7. What the file-operation wrappers do and do not do</a> · <a href="#unregistering-blocks-new-access-it-does-not-immediately-free-memory">8. Unregistering blocks new access; it does not immediately free memory</a> · <a href="#several-release-paths-and-references-have-different-jobs">9. Several release paths and references have different jobs</a> · <a href="#example-organizing-registration-of-one-node">10. Example: organizing registration of one node</a> · <a href="#auxiliary-mechanisms-around-the-lifecycle">11. Auxiliary mechanisms around the lifecycle</a> · <a href="#debug-common-failures-one-layer-at-a-time">12. Debug common failures one layer at a time</a> · <a href="#a-source-reading-checklist">13. A source-reading checklist</a> · <a href="#references">References</a></p></div><div class="kb-section"><h2 id="follow-one-open-from-userspace">1. Follow one open from userspace</h2>
+<p>Userspace sees a pathname. The kernel follows the character-device number to a V4L2 node, then the core wrapper calls the driver callbacks:</p>
+<pre class="kb-code"><code class="language-text">open(&quot;/dev/video0&quot;)
+  → pathname lookup yields a character-device inode and dev_t
+  → dev_t resolves to a cdev
+  → cdev-&gt;ops points to the V4L2 core v4l2_fops
+  → v4l2_open() looks up video_device by minor
+  → video_get() keeps the node object alive
+  → video_device-&gt;fops-&gt;open()
+  → core wrappers dispatch later read / ioctl / mmap / poll operations
+</code></pre>
+<p><code>v4l2-dev.c</code> manages how a node appears, is accessed, and is removed. It is not the camera capture engine. Setting a streaming capability does not create buffers, and the V4L2 core does not stop a driver's DMA, interrupts, or sensor for it.</p></div><div class="kb-section"><h2 id="separate-the-node-its-parent-and-one-open-file">2. Separate the node, its parent, and one open file</h2>
+<p><code>struct video_device</code> represents one node instance that exposes a V4L2 file interface. A physical device can provide capture, output, or codec nodes. They may share one <code>struct v4l2_device</code>, while retaining their own node numbers, capabilities, and operation tables.</p>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th>Lifetime and responsibility</th>
+<th>Do not confuse it with</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>struct v4l2_device</code></td>
+<td>Organizes V4L2 nodes, subdevices, and shared state</td>
+<td>The <code>/dev/videoX</code> node</td>
+</tr>
+<tr>
+<td><code>struct video_device</code></td>
+<td>Core object for one V4L2 character-device node</td>
+<td>The whole camera or one open context</td>
+</tr>
+<tr>
+<td>Embedded <code>struct device</code></td>
+<td>Device-model identity, sysfs hierarchy, and object references</td>
+<td>The character-device operation entry point</td>
+</tr>
+<tr>
+<td><code>struct cdev</code></td>
+<td>Connects a character-device number to <code>file_operations</code></td>
+<td>Device-model naming and full release policy</td>
+</tr>
+<tr>
+<td><code>struct file</code> / <code>file-&gt;private_data</code></td>
+<td>File object and driver context for an open</td>
+<td>The shared <code>video_device</code></td>
+</tr>
+<tr>
+<td><code>struct v4l2_fh</code></td>
+<td>Optional standard V4L2 file-handle and event association</td>
+<td>An object created unless the driver uses the helper API</td>
+</tr>
+<tr>
+<td><code>struct vb2_queue</code></td>
+<td>Video-buffer queue associated with the node</td>
+<td>A pointer that proves a queue is initialized or streaming</td>
+</tr>
+</tbody>
+</table>
+<p>When reading the structure, ask who creates each pointer, who owns it, and who releases it. Storing a pointer in <code>video_device</code> neither copies the target object nor transfers ownership of its memory.</p>
+<h3 id="fops-and-ioctl_ops-have-different-jobs"><code>fops</code> and <code>ioctl_ops</code> have different jobs</h3>
+<p><code>video_device-&gt;fops</code> is the node's file-operation table, with entry points such as <code>open</code>, <code>release</code>, <code>read</code>, <code>poll</code>, <code>mmap</code>, and <code>unlocked_ioctl</code>. <code>video_device-&gt;ioctl_ops</code> is the table of standard V4L2 ioctl callbacks, such as <code>vidioc_querycap</code>, <code>vidioc_s_fmt_vid_cap</code>, <code>vidioc_reqbufs</code>, and <code>vidioc_streamon</code>.</p>
+<p>A common standard-dispatch path looks like this:</p>
+<pre class="kb-code"><code class="language-text">userspace ioctl(fd, VIDIOC_..., arg)
+  → core v4l2_ioctl()
+  → node fops-&gt;unlocked_ioctl()
+  → driver commonly wires this to video_ioctl2()
+  → dispatch by command, arguments, and format type to ioctl_ops-&gt;vidioc_*()
+</code></pre>
+<p>Wiring <code>unlocked_ioctl</code> to <code>video_ioctl2</code> is a common driver choice; it does not happen merely because <code>ioctl_ops</code> is populated. A custom ioctl dispatcher can follow another route, so do not assume that it uses the standard callback table, valid-command bitmap, or standard locking.</p></div><div class="kb-section"><h2 id="the-8-in-devvideo8-is-not-necessarily-minor-8">3. The <code>8</code> in <code>/dev/video8</code> is not necessarily minor 8</h2>
+<p>Several <code>video_device</code> fields look like variations of the same identity:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+<th>Main use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>Descriptive name supplied by the driver</td>
+<td>Description in sysfs and media entities</td>
+</tr>
+<tr>
+<td><code>num</code></td>
+<td>Suffix in the device-node name</td>
+<td>Creates a device-model name such as <code>video8</code></td>
+</tr>
+<tr>
+<td><code>minor</code></td>
+<td>Character-device minor number</td>
+<td><code>cdev_add()</code> and <code>video_devices[]</code> lookup</td>
+</tr>
+<tr>
+<td><code>index</code></td>
+<td>Node index within one <code>v4l2_device</code></td>
+<td>Distinguishes nodes in the same group</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>8</code> in <code>/dev/video8</code> belongs to the node-naming namespace; it is not parsed from the pathname and passed to the driver. The core reads the minor from the inode's <code>dev_t</code>, then looks up the node. Without fixed minor ranges, <code>num</code> and <code>minor</code> can be allocated independently; with <code>CONFIG_VIDEO_FIXED_MINOR_RANGES</code>, the mapping differs. During debugging, use the device number from <code>stat</code> and the sysfs <code>dev</code> attribute instead of guessing from the filename.</p>
+<p><code>vfl_type</code>, <code>vfl_dir</code>, and <code>device_caps</code> are also separate dimensions. The type distinguishes video, radio, VBI, and other node classes; direction describes receive, transmit, or memory-to-memory operation; capabilities declare the V4L2 functions exposed by the node. A capability bit does not implement the corresponding callback.</p></div><div class="kb-section"><h2 id="core-initialization-does-not-create-every-video-node">4. Core initialization does not create every video node</h2>
+<p>V4L2 core initialization registers a character-device number range and the <code>video4linux</code> device class. This prepares shared infrastructure; it does not create <code>/dev/video0</code> for every camera. A driver later prepares one <code>video_device</code> per node and calls <code>video_register_device()</code>.</p>
+<p>The appearance of a device file in <code>/dev</code> also involves the Linux device model and a device-node manager such as devtmpfs or udev. Keep these operations distinct: <code>cdev_add()</code> maps a device number to file operations; <code>device_register()</code> publishes a device-model object; node-management mechanisms make the character-device file visible in <code>/dev</code>.</p></div><div class="kb-section"><h2 id="registration-publishes-the-node-in-stages">5. Registration publishes the node in stages</h2>
+<p>Drivers commonly call:</p>
+<pre class="kb-code"><code class="language-c">ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
+</code></pre>
+<p>In Linux 6.1 this public helper enters <code>__video_register_device()</code>. Following resources as they are established makes concurrency and failure cases easier to reason about than memorizing a list of function names:</p>
+<ol>
+<li><strong>Validate the contract and prepare defaults</strong>: a release callback, parent <code>v4l2_device</code>, and capabilities for non-subdevice nodes must be valid; the file-operation table and required callbacks must already be set. The core initializes <code>fh_lock</code>/<code>fh_list</code>, selects the node type, and inherits the parent device, control handler, and priority state when those fields are unset.</li>
+<li><strong>Reserve a name and device number</strong>: under <code>videodev_lock</code>, the core selects <code>num</code>, <code>minor</code>, and the group's <code>index</code>, marks the number bitmap, and stores the pointer in <code>video_devices[minor]</code>. Once this lock is released the slot is reserved, but V4L2 file operations are not yet enabled.</li>
+<li><strong>Compute valid standard ioctls</strong>: if <code>ioctl_ops</code> is used, the core builds a candidate set from node type, direction, capabilities, and callbacks. <code>v4l2_disable_ioctl()</code> must be called before registration; in this registration path, pre-set bits mean “disable”, while the resulting bitmap represents supported standard commands.</li>
+<li><strong>Establish the character-device entry</strong>: allocate a <code>cdev</code>, attach the common core <code>v4l2_fops</code>, set the module owner, and call <code>cdev_add()</code> for the major/minor. All nodes enter the same core wrappers first, which then dispatch to each node's <code>vdev-&gt;fops</code>.</li>
+<li><strong>Publish the device-model object</strong>: fill in the class, <code>dev_t</code>, parent, and name, then call <code>device_register()</code>. This creates the device-model/sysfs representation and enters the system device-node path; it is not a V4L2-specific replacement for calling <code>mknod()</code>.</li>
+<li><strong>Hold the parent and establish optional media associations</strong>: the node holds a reference to its parent <code>v4l2_device</code>; when Media Controller support is enabled, the node can also be connected to the media topology. A media interface object is not the same thing as the <code>/dev/videoX</code> character-device file.</li>
+<li><strong>Enable access last</strong>: set <code>V4L2_FL_REGISTERED</code>, release the management lock, and return success. The open path checks this state, so an assigned number, a non-null global-table entry, or a successful <code>cdev_add()</code> alone does not mean the node is active.</li>
+</ol>
+<pre class="kb-code"><code class="language-text">initial object → reserve numbers → compute ioctl set → cdev mapping → device/sysfs publish
+               → parent/media association → set REGISTERED → allow new opens
+</code></pre>
+<p>Initialize every object, back-pointer, and lock that callbacks may read before registration. After publication, another CPU can enter <code>open()</code> immediately, even before the registering caller executes its next statement.</p>
+<h3 id="an-example-of-num-minor-and-index">An example of <code>num</code>, <code>minor</code>, and <code>index</code></h3>
+<p>Assume a build without fixed minor ranges. A node may receive the name suffix <code>video8</code> while the first free slot in the global character-device table is minor <code>0</code>; a node of another class may then occupy minor <code>1</code>. The <code>index</code> within one <code>v4l2_device</code> is allocated independently from the first free slot. This illustrates that the numbers answer different questions; it does not promise the same values under every configuration.</p>
+<p><code>index</code> is not just a monotonically increasing counter either. The core scans existing nodes associated with the same <code>v4l2_device</code> and picks the first free index, so an index can be reused after its previous node is finally released.</p>
+<h3 id="failure-cleanup-and-object-ownership">Failure cleanup and object ownership</h3>
+<p>Failure paths undo only resources that have already been acquired. If registration fails after reserving a number, the core removes any established <code>cdev</code>, global-table entry, and number reservation. But <code>video_register_device()</code> does not call <code>vdev-&gt;release</code> on failure. The driver must release its node according to its allocation layout: a standalone object from <code>video_device_alloc()</code> is usually released with <code>video_device_release()</code> in the failure path; an embedded object follows the outer object's lifetime policy.</p>
+<p>Do not treat a failed object as a successfully registered node and continue with normal unregister, or edit a few fields and blindly retry registration. The kernel API documentation explicitly leaves object cleanup after registration failure to the caller.</p></div><div class="kb-section"><h2 id="the-open-path-lookup-validation-and-refcounting-share-one-critical-section">6. The open path: lookup, validation, and refcounting share one critical section</h2>
+<p>During registration, the core stores:</p>
+<pre class="kb-code"><code class="language-c">video_devices[vdev-&gt;minor] = vdev;
+</code></pre>
+<p>At open time, <code>video_devdata(file)</code> uses the inode minor to look up the same table. The core's essential sequence can be summarized as:</p>
+<pre class="kb-code"><code class="language-c">mutex_lock(&amp;videodev_lock);
+vdev = video_devdata(filp);
+if (!vdev || !video_is_registered(vdev)) {
+        mutex_unlock(&amp;videodev_lock);
+        return -ENODEV;
+}
+video_get(vdev);
+mutex_unlock(&amp;videodev_lock);
+
+/* Do not run a complex driver open callback under the global node lock. */
+if (vdev-&gt;fops-&gt;open)
+        ret = vdev-&gt;fops-&gt;open(filp);
+if (ret)
+        video_put(vdev);
+</code></pre>
+<p>The locked sequence “lookup → confirm registered → acquire an object reference” is one handoff. If the core looked up a pointer, unlocked, and only later took a reference, an unregistering thread could complete final release first, leaving open with a dangling pointer. The core drops the global lock before calling the driver so a complex or sleeping <code>open()</code> does not block management of every other node.</p>
+<p>Locks and references have different jobs: the lock protects the state handoff, while the reference keeps the object alive. The core's second registered-state check does not make driver callbacks and hardware removal fully mutually exclusive; the driver must still synchronize disconnect, stream shutdown, and in-flight operations.</p>
+<p>Do not mix these three ways of obtaining data:</p>
+<ul>
+<li><code>video_devdata(file)</code>: the <code>video_device</code> for the current file.</li>
+<li><code>video_get_drvdata(vdev)</code> / <code>video_drvdata(file)</code>: driver-private data associated with the node.</li>
+<li><code>file-&gt;private_data</code>: usually the context created for this particular <code>open()</code>; independent opens normally need independent contexts.</li>
+</ul>
+<p>The core does not populate <code>file-&gt;private_data</code> for the driver or clean up private allocations made by a driver <code>open()</code> that fails.</p></div><div class="kb-section"><h2 id="what-the-file-operation-wrappers-do-and-do-not-do">7. What the file-operation wrappers do and do not do</h2>
+<p>After a successful open, the core wrappers are installed in the file-operation path. Later <code>read()</code> and <code>ioctl()</code> calls do not repeat character-device open lookup; the core checks node state and callback presence, then forwards the call.</p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Main responsibility of the core</th>
+<th>Typical boundary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>read</code> / <code>write</code></td>
+<td>Check callback and registration state, then forward</td>
+<td>Does not guarantee a complete frame copy or wait for a frame automatically</td>
+</tr>
+<tr>
+<td><code>mmap</code></td>
+<td>Check callback and node state, then invoke the driver</td>
+<td>Does not allocate buffers; actual mapping is often handled by driver/VB2</td>
+</tr>
+<tr>
+<td><code>unlocked_ioctl</code></td>
+<td>Forward to the node's file-operation table</td>
+<td>Standard commands often continue through <code>video_ioctl2()</code> and <code>ioctl_ops</code></td>
+</tr>
+<tr>
+<td><code>poll</code></td>
+<td>Forward event waiting or return the appropriate default/error mask</td>
+<td>Does not infer “a frame is ready” merely from a non-null <code>queue</code> pointer</td>
+</tr>
+<tr>
+<td><code>release</code></td>
+<td>Call the driver's close handler, then drop the core open reference</td>
+<td>Old files still need close cleanup after the node is unregistered</td>
+</tr>
+</tbody>
+</table>
+<p>When an ioctl returns <code>-ENOTTY</code>, trace the file-level ioctl callback, standard <code>video_ioctl2()</code> dispatch, <code>valid_ioctls</code> filtering, and the specific <code>vidioc_*</code> implementation. The final errno alone does not identify which layer rejected the command. <code>valid_ioctls</code> is not a generic authorization table for arbitrary private ioctls either.</p></div><div class="kb-section"><h2 id="unregistering-blocks-new-access-it-does-not-immediately-free-memory">8. Unregistering blocks new access; it does not immediately free memory</h2>
+<p>Remove a registered node with <code>video_unregister_device(vdev)</code>, not by directly removing the internal cdev or clearing the core's global table by hand. The main Linux 6.1 sequence is:</p>
+<ol>
+<li>Clear <code>V4L2_FL_REGISTERED</code> under <code>videodev_lock</code>, so a later normal open cannot acquire a new node reference.</li>
+<li>Wake waiters using the standard <code>v4l2_fh</code> event mechanism so they can re-check device state.</li>
+<li>Call <code>device_unregister()</code> to remove the device-model object and drop the registration reference.</li>
+</ol>
+<p>Files that were already open may still exist and must go through their own <code>release()</code> cleanup. When <code>device_unregister()</code> returns, <code>vdev</code> may already have been finally released, or it may remain alive due to old file references. The caller cannot tell whether it is still valid merely because the function just returned. The kernel documentation likewise states that no new opens are accepted after unregister; old file operations other than release return errors, and the final node release callback runs when the last user exits.</p>
+<p>Unregister does not mean that the driver hardware has safely stopped. Stopping DMA, synchronizing or masking interrupts, waking private wait queues, preventing new queue submissions, and handling hot unplug remain the responsibility of the driver and relevant frameworks. <code>V4L2_FL_REGISTERED</code> is node-access state, not a hardware-health or streaming-state flag.</p></div><div class="kb-section"><h2 id="several-release-paths-and-references-have-different-jobs">9. Several release paths and references have different jobs</h2>
+<p>At least these paths must be distinguished:</p>
+<table>
+<thead>
+<tr>
+<th>Callback/operation</th>
+<th>Object affected</th>
+<th>When it runs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vdev-&gt;fops-&gt;release(file)</code></td>
+<td>Driver context for one open</td>
+<td>When the file object finally closes; can happen multiple times</td>
+</tr>
+<tr>
+<td>Core <code>v4l2_release()</code> / <code>video_put(vdev)</code></td>
+<td>Drops the node reference held by a successful open</td>
+<td>After driver release, even if that callback returns an error</td>
+</tr>
+<tr>
+<td><code>v4l2_device_release(struct device *)</code></td>
+<td>V4L2 core registration resources</td>
+<td>When references to the node's <code>struct device</code> reach zero</td>
+</tr>
+<tr>
+<td><code>vdev-&gt;release(vdev)</code></td>
+<td>Node and driver-private storage</td>
+<td>Final release after core cleanup</td>
+</tr>
+<tr>
+<td><code>v4l2_device_put()</code></td>
+<td>Parent V4L2 organization object</td>
+<td>Returned by final node-release logic according to its lifetime contract</td>
+</tr>
+</tbody>
+</table>
+<p>In a simplified example with only a registration reference and two successful opens, the reference count is illustrated as 1 after registration, 2 after file A opens, and 3 after file B opens. Unregister drops the registration reference to 2; final release of A and B drops their references, after which the count may reach 0. Real counts can also include device-model and temporary references; this is a pairing illustration, not a fixed count formula in the code.</p>
+<p>The core's final callback recovers <code>video_device</code> from the embedded <code>struct device</code>, then clears <code>video_devices[minor]</code>, the <code>cdev</code>, the number reservation, and applicable media associations before calling the driver's <code>vdev-&gt;release</code>. The number must stay reserved until final release: if the old minor were reused immediately at unregister, an old file could later close using its inode minor and find the wrong new node in the table.</p>
+<h3 id="why-there-is-more-than-one-release">Why there is more than one <code>release</code></h3>
+<ul>
+<li><code>fops-&gt;release</code> means “this open is finished”; it cleans each file context.</li>
+<li><code>vdev-&gt;release</code> means “the node object is finished”; it may free <code>video_device</code> or its enclosing object.</li>
+<li>The <code>struct device</code> <code>.release</code> is first handled by the V4L2 core to remove core-owned registration state.</li>
+</ul>
+<p>Use <code>video_device_release</code> for a standalone allocation. Static or embedded objects need a callback suited to their layout. After a successful unregister, do not unconditionally call <code>video_device_release(vdev)</code> yourself; that can race remaining file references and cause use-after-free or double-free.</p></div><div class="kb-section"><h2 id="example-organizing-registration-of-one-node">10. Example: organizing registration of one node</h2>
+<p>This only shows how a node connects to the framework; it is not a complete compilable camera driver. <code>ctx</code>, the queue, locks, operation tables, and hardware setup belong to the driver. <code>ctx</code> and callback tables must remain valid as long as the node may be used.</p>
+<pre class="kb-code"><code class="language-c">static int example_register_node(struct example_device *ctx)
+{
+        struct video_device *vdev;
+        int ret;
+
+        vdev = video_device_alloc();
+        if (!vdev)
+                return -ENOMEM;
+
+        strscpy(vdev-&gt;name, &quot;Example Capture&quot;, sizeof(vdev-&gt;name));
+        vdev-&gt;v4l2_dev = &amp;ctx-&gt;v4l2_dev;
+        vdev-&gt;fops = &amp;example_fops;
+        vdev-&gt;ioctl_ops = &amp;example_ioctl_ops;
+        vdev-&gt;release = video_device_release;
+        vdev-&gt;vfl_dir = VFL_DIR_RX;
+        vdev-&gt;device_caps = V4L2_CAP_VIDEO_CAPTURE_MPLANE |
+                            V4L2_CAP_STREAMING;
+        vdev-&gt;lock = &amp;ctx-&gt;lock;
+        video_set_drvdata(vdev, ctx);
+
+        /* Prepare reverse pointers before callbacks can observe the node. */
+        ctx-&gt;vdev = vdev;
+
+        ret = video_register_device(vdev, VFL_TYPE_VIDEO, -1);
+        if (ret) {
+                ctx-&gt;vdev = NULL;
+                video_device_release(vdev);
+                return ret;
+        }
+
+        return 0;
+}
+</code></pre>
+<p>On successful removal, the driver first coordinates hardware shutdown and in-flight operations, then calls <code>video_unregister_device(ctx-&gt;vdev)</code>. Let references and <code>vdev-&gt;release</code> govern final storage release. If <code>ctx</code> cannot outlive every still-open node file, add a parent reference or a dedicated outer-object release policy. Capability bits, direction, format callbacks, and VB2 queue type must agree.</p></div><div class="kb-section"><h2 id="auxiliary-mechanisms-around-the-lifecycle">11. Auxiliary mechanisms around the lifecycle</h2>
+<p><code>video_device</code> also carries node-level supporting state. Read these fields in the context of the ownership and dispatch boundaries above; a field being present in the same structure does not mean registration implements its behavior automatically.</p>
+<h3 id="sysfs-attributes-still-describe-the-same-node">Sysfs attributes still describe the same node</h3>
+<p><code>video_class</code> provides attributes such as <code>name</code>, <code>index</code>, and <code>dev_debug</code>. An attribute callback receives <code>struct device *</code> and follows the embedded-object relationship back to the same <code>video_device</code> to read or update a member. <code>dev_debug</code> is a bitmap controlling core debug output, not a second device identity for each node.</p>
+<h3 id="v4l2-priority-is-not-scheduler-priority">V4L2 priority is not scheduler priority</h3>
+<p><code>v4l2_prio_state</code> tracks how many open contexts are active at each access priority. The priority helpers update these counts and can compare a file handle with the highest active level for standard operations that request such a check; a lower-priority operation may receive <code>-EBUSY</code>. This is not Linux process scheduling priority, and it does not automatically check every driver-specific operation.</p>
+<h3 id="a-lock-field-does-not-protect-every-callback-automatically">A lock field does not protect every callback automatically</h3>
+<p><code>video_device-&gt;lock</code> is a mutex pointer that standard ioctl dispatch can use. Do not infer that every core wrapper acquires it: open, read, mmap, poll, and ioctl do not have identical synchronization paths. The <code>video_ioctl2()</code> path selects a lock according to standard dispatch rules, and queue operations may use <code>vb2_queue-&gt;lock</code>; a custom driver path still needs an explicit locking order.</p>
+<p>When Media Request is enabled, the core close path can use the request-queue mutex to serialize close/stream cancellation against new request submission. This addresses a specific request-queue race; it does not replace node-management locks, queue locks, or hardware-removal synchronization.</p>
+<h3 id="media-controller-pipeline-start-is-not-hardware-stream-on">Media Controller pipeline start is not hardware stream-on</h3>
+<p><code>video_device_pipeline_start()</code> / <code>video_device_pipeline_stop()</code> connect the node to Media Controller pipeline-state management and use the media layer subject to the node entity's pad requirements. They do not start camera registers or DMA by themselves; the driver and complete media pipeline still need to start and stop the actual hardware stream.</p></div><div class="kb-section"><h2 id="debug-common-failures-one-layer-at-a-time">12. Debug common failures one layer at a time</h2>
+<pre class="kb-code"><code class="language-bash"># Node file, device number, and permissions
+ls -l /dev/video*
+stat /dev/video0
+cat /sys/class/video4linux/video0/dev
+cat /sys/class/video4linux/video0/name
+
+# Devices and capabilities recognized by the kernel (install v4l-utils)
+v4l2-ctl --list-devices
+v4l2-ctl --all -d /dev/video0
+
+# Inspect topology only for devices integrated with Media Controller
+media-ctl --print-topology
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Where to look</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No <code>/dev/videoX</code></td>
+<td>Did the driver finish <code>video_register_device()</code>? Was the device model published? Are devtmpfs/udev working? Check probe logs and sysfs.</td>
+</tr>
+<tr>
+<td>Unexpected node number</td>
+<td>Check <code>num</code>, <code>minor</code>, and group <code>index</code>, and <code>CONFIG_VIDEO_FIXED_MINOR_RANGES</code>; do not treat the filename suffix as minor.</td>
+</tr>
+<tr>
+<td><code>open()</code> returns <code>-ENODEV</code></td>
+<td>The node may not be active or may have been unregistered/hot-unplugged; inspect the registration lifetime and driver-removal ordering.</td>
+</tr>
+<tr>
+<td>ioctl returns <code>-ENOTTY</code></td>
+<td>Check node <code>unlocked_ioctl</code>, use of <code>video_ioctl2()</code>, callback table, capabilities, direction, and standard-command filtering.</td>
+</tr>
+<tr>
+<td>Object remains after unregister</td>
+<td>Check for open files and their references; verify every successful open eventually drops its reference.</td>
+</tr>
+<tr>
+<td>Crash or double-free at close</td>
+<td>Distinguish file-level <code>fops-&gt;release</code> from node-level <code>vdev-&gt;release</code>; check for manual free after successful unregister.</td>
+</tr>
+</tbody>
+</table></div><div class="kb-section"><h2 id="a-source-reading-checklist">13. A source-reading checklist</h2>
+<ol>
+<li>Find how the driver allocates <code>video_device</code> and whether <code>release</code> matches the standalone or embedded-memory layout.</li>
+<li>Follow <code>video_register_device()</code> into Linux 6.1 <code>__video_register_device()</code> and mark when numbers, the global table, cdev, device model, and registered flag are established.</li>
+<li>Start from <code>.open</code> in <code>v4l2_fops</code> and follow <code>video_devdata()</code> to see how the inode minor returns to <code>video_devices[]</code>.</li>
+<li>Inspect <code>video_device-&gt;fops</code> and <code>ioctl_ops</code> separately; verify that the standard ioctl helper is actually connected.</li>
+<li>Trace <code>video_unregister_device()</code>, core <code>v4l2_release()</code>, <code>video_put()</code>, and the device's final <code>.release</code>; pair each reference acquisition with a corresponding release.</li>
+<li>Return to the driver's remove/disconnect path and make sure hardware shutdown is not mistakenly expected to happen automatically through the V4L2 node reference count.</li>
+</ol>
+<p>The lifecycle can be summarized in one sentence: registration establishes node identity and entry points; core wrappers find and dispatch to the node; unregister blocks new access; references determine when registrations and memory can finally be removed. Understanding these layers gives a firm starting point for format negotiation, videobuf2 queues, media topology, and actual capture hardware.</p></div><div class="kb-section"><h2 id="references">References</h2>
+<p>This article draws on the analysis published by 飞一样的成长, “V4L2 Source Deep Dive: The Full Lifecycle from <code>video_device</code> to <code>/dev/videoX</code>” (2026-09-23). It has been reorganized and checked against Linux 6.1 source and documentation; the original figures are not reproduced.</p>
+<p>Related reading: <a href="https://yanruihe.github.io/posts/en/buildroot-from-zero/">Buildroot from scratch</a> · <a href="https://yanruihe.github.io/posts/en/yocto-from-zero/">Yocto from scratch</a> · <a href="https://yanruihe.github.io/knowledge-base/en/">Embedded Linux knowledge base</a></p>
+<ul>
+<li><a href="https://github.com/torvalds/linux/blob/v6.1/drivers/media/v4l2-core/v4l2-dev.c">Linux v6.1 <code>v4l2-dev.c</code> source</a></li>
+<li><a href="https://docs.kernel.org/6.1/driver-api/media/v4l2-dev.html">Linux v6.1 V4L2 video-device documentation</a></li>
+<li><a href="https://docs.kernel.org/6.1/driver-api/media/v4l2-device.html">Linux v6.1 V4L2 device-instance documentation</a></li>
+</ul></div></div></div></div></div></div><div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <a href="/">yanruihe</a></div><div class="theme-info info-item">V4L2 · Linux Kernel 6.1</div></div></footer></div></div></main><script src="/js/i18n.js"></script></body></html>
