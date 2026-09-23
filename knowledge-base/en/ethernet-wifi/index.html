@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="RGMII, SGMII, wireless drivers, and automotive Ethernet debugging">
+  <meta name="description" content="RK3588 Rockchip Linux 6.1 Ethernet PHY, Wi-Fi, and automotive Ethernet">
   <meta name="author" content="yanruihe">
   <title>Linux Ethernet PHY and Wi-Fi Debugging | Rui&#39;s Blog</title>
   <link rel="stylesheet" href="/css/style.css">
@@ -19,9 +19,19 @@
   </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
   <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
     <div class="article-title"><span class="title-hover-animation">Linux Ethernet PHY and Wi-Fi Debugging</span></div>
-    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">Updated 2026-09-24 &#183; RGMII, SGMII, wireless drivers, and automotive Ethernet debugging</div></div></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">Updated 2026-09-24 &#183; RK3588 / Rockchip Linux develop-6.1 Ethernet and Wi-Fi debugging</div></div></div>
     <div class="article-content keep-markdown-body kb-topic-body">
 <div class="kb-lead"><p>This topic focuses on board-level network bring-up: start with the device-tree and MAC/PHY topology, then verify link, protocol, and userspace layers in order. RGMII and SGMII describe interfaces between a MAC and a PHY/PCS; they are not the cable-side Ethernet medium. Timing, clocks, reset, and the peer configuration must be checked together.</p></div>
+<blockquote>
+<p><strong>Platform/source baseline:</strong> Rockchip RK3588 and the <code>develop-6.1</code> branch of the official <a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1"><code>rockchip-linux/kernel</code></a> repository. The source snapshot checked for this guide is <code>77168c8d5ab82399f65a80e9f807b50ba37cf483</code>. This is a moving branch: record the actual kernel commit, board DTS, and <code>.config</code> when reproducing. PHY, switch, Wi-Fi module, and interface capabilities are board-specific.</p>
+</blockquote>
+<h2 id="rk3588-rockchip-6.1-source-entry-points">RK3588 + Rockchip 6.1 source entry points</h2>
+<ul>
+<li>Start with <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi"><code>rk3588.dtsi</code></a> / <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi"><code>rk3588s.dtsi</code></a>, then follow the enabled GMAC node into the target board DTS. Check <code>compatible</code>, <code>phy-mode</code>, MDIO, PHY address, clocks, reset, pinctrl, and delay configuration. The SoC DTSI is common description, not a substitute for board wiring.</li>
+<li>RK3588 GMAC compatibles include <code>rockchip,rk3588-gmac</code> and a Synopsys DWMAC compatible. Do not infer the active glue driver from a filename: follow this branch's <code>of_match_table</code>, probe path, and MAC/PCS driver before deciding whether the board supports RGMII or SGMII.</li>
+<li>The branch contains the vendor wireless directory <a href="https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/net/wireless/rockchip_wlan/rkwifi"><code>drivers/net/wireless/rockchip_wlan/rkwifi/</code></a>. The actual driver, firmware, bus, and cfg80211/mac80211/FullMAC path depend on the module part number and product configuration; this is not a default Wi-Fi implementation for every RK3588 board.</li>
+<li>Automotive 100BASE-T1/1000BASE-T1 also requires a compatible external PHY/switch, board interface, and peer. It is not a default integrated RK3588 capability.</li>
+</ul>
 <h2 id="separate-the-data-paths">1. Separate the data paths</h2>
 <p>A wired path is broadly:</p>
 <pre class="kb-code"><code class="language-text">SoC MAC ↔ MAC-PHY interface (RGMII / SGMII, etc.) ↔ PHY ↔ magnetics/connector/cable ↔ peer
@@ -91,15 +101,15 @@ ip link show wlan0
 <p>Automotive Ethernet is not complete just because a conventional Ethernet PHY is set to 100 Mbit/s or 1 Gbit/s. Identify the actual physical layer (for example 100BASE-T1 or 1000BASE-T1), PHY/switch, MAC/PCS, master/slave roles, harness/connector, and peer configuration. Follow the device data sheet and the applicable IEEE / OPEN Alliance specifications for link, interoperability, harness, and EMC validation. Linux-side concerns still include device tree, MDIO, phylib/phylink, PCS, time-synchronization needs, and observability; <code>ping</code> or a throughput test cannot replace conformance testing.</p>
 <h2 id="bring-up-record-template">6. Bring-up record template</h2>
 <p>Record the board/schematic revision, SoC and PHY/Wi-Fi part numbers, kernel and device-tree commits, PHY address/interface mode, power/clock/reset, firmware version, peer configuration, reproduction conditions, logs, and test results. State what was observed, what was ruled out, what changed, and how to revert it; avoid a bare “network works” conclusion.</p>
-<h2 id="official-references">Official references</h2>
+<h2 id="official-source-references-rockchip-linux-6.1">Official source references (Rockchip Linux 6.1)</h2>
 <ul>
-<li><a href="https://docs.kernel.org/networking/phy.html">Linux PHY Abstraction Layer</a></li>
-<li><a href="https://docs.kernel.org/networking/phy-link-topology.html">Linux PHY link topology</a></li>
-<li><a href="https://docs.kernel.org/driver-api/80211/cfg80211.html">cfg80211 subsystem</a></li>
-<li><a href="https://wireless.docs.kernel.org/en/latest/en/developers/documentation/mac80211.html">Linux Wireless: mac80211</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1">Rockchip kernel <code>develop-6.1</code> branch</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi">RK3588 common device tree</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi">RK3588S device tree</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/net/ethernet/stmicro/stmmac/dwmac-rk.c">DWMAC Rockchip glue source</a> (confirm the actual board binding through its compatible)</li>
+<li><a href="https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/net/wireless/rockchip_wlan/rkwifi">Rockchip WLAN driver directory</a></li>
 </ul>
 
-    </div>
+</div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Powered by Hexo | Knowledge Base</div></div></footer></div>
 </div></main>

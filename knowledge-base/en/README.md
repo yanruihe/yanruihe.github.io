@@ -2,6 +2,8 @@
 
 This searchable embedded Linux knowledge base covers Git/Yocto workflows, board-level networking/audio/storage bring-up, and kernel memory/crash diagnosis.
 
+The hardware and driver topics use Rockchip RK3588 and the [`develop-6.1` branch of `rockchip-linux/kernel`](https://github.com/rockchip-linux/kernel/tree/develop-6.1) as their source baseline. Actual peripherals, device trees, kernel configuration, and available features remain board-specific. Source links in these topics point to snapshot `77168c8d5ab82399f65a80e9f807b50ba37cf483`.
+
 ## Topics
 
 | Topic | What it covers |

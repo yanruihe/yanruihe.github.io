@@ -2,6 +2,14 @@
 
 这条专题的目标不是背 API，而是建立从“症状和现场证据”到“对象生命周期、并发、内存来源和硬件事务”的根因分析路径。驱动 panic 经常是更早发生的越界、释放后使用、DMA 地址错误或竞态在稍后暴露。
 
+> **平台与源码基线：** Rockchip RK3588，官方 [`rockchip-linux/kernel`](https://github.com/rockchip-linux/kernel/tree/develop-6.1) 的 `develop-6.1` 分支；本文核对的代码快照为 `77168c8d5ab82399f65a80e9f807b50ba37cf483`。分析必须使用与现场镜像完全匹配的源码提交、`.config`、DTS、`vmlinux` 和模块符号；内存保留区、CMA、IOMMU、外设 DMA 能力及检测器选项由具体板级配置决定。
+
+## RK3588 + Rockchip 6.1 调试基线
+
+- 从对应板卡 DTS 和 `.config` 入手确认 `reserved-memory`、CMA、IOMMU/DMA mask、console、pstore/ramoops 或 kdump 的实际配置；不要把某个 RK3588 开发板的内存布局套到其他板卡。
+- Oops/vmcore 符号化时使用产生该镜像的精确 `develop-6.1` commit、未剥离 `vmlinux`、模块、`System.map` 与 build ID。分支名相同并不代表构建产物可互换。
+- KASAN、KFENCE、KCSAN、lockdep 和 kdump 等支持受该分支代码、内核配置、启动链与可用内存共同约束；先在对应 RK3588 测试镜像验证开销与可用性，再决定产品配置。
+
 ## 1. 驱动中常见的内存与生命周期
 
 - **页分配器 / slab**：大块页、常见小对象缓存分别服务不同粒度；`kmalloc`、`kzalloc` 常用于物理连续的小块内核对象，`vmalloc` 提供虚拟连续但物理页可不连续的区域。DMA 场景不能把“CPU 有虚拟地址”当成设备可用 DMA 地址。
@@ -59,9 +67,9 @@
 
 保存：症状与复现率、崩溃原始日志、硬件/软件版本、匹配符号制品、可疑对象生命周期图、排除过的假设、检测器和测量结果、根因证据、修复 diff、回归测试与剩余风险。把“发生了什么”与“为什么发生”分开写，后者必须由证据支持。
 
-## 官方参考
+## 官方源码与文档（Rockchip Linux 6.1）
 
-- [Linux Memory Management](https://docs.kernel.org/admin-guide/mm/)
-- [Kdump crash dump guide](https://docs.kernel.org/admin-guide/kdump/kdump.html)
-- [KASAN](https://docs.kernel.org/dev-tools/kasan.html) · [KFENCE](https://docs.kernel.org/dev-tools/kfence.html) · [Kernel testing tools](https://docs.kernel.org/dev-tools/testing-overview.html)
-- [I2C subsystem](https://docs.kernel.org/driver-api/i2c.html) · [SPI subsystem](https://docs.kernel.org/driver-api/spi.html) · [Serial driver API](https://docs.kernel.org/driver-api/serial/driver.html)
+- [Rockchip kernel `develop-6.1` 分支](https://github.com/rockchip-linux/kernel/tree/develop-6.1)
+- [RK3588 公共设备树](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi) · [RK3588S 设备树](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi)
+- [同分支 kdump 文档](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/admin-guide/kdump/kdump.rst) · [KASAN](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/dev-tools/kasan.rst) · [KFENCE](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/dev-tools/kfence.rst)
+- [I2C 驱动文档](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/i2c.rst) · [SPI 驱动文档](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/spi.rst) · [串口驱动文档](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/serial/driver.rst)

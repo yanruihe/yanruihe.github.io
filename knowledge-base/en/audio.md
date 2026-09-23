@@ -2,6 +2,14 @@
 
 This guide starts from practical symptoms—silence, distortion, and pops—and builds a repeatable debugging path. An embedded sound card is more than a CODEC driver that probes successfully: the CPU DAI, CODEC DAI, machine connections, clocks, DMA, DAPM route, analog rails, and userspace parameters must all line up.
 
+> **Platform/source baseline:** Rockchip RK3588 and the `develop-6.1` branch of the official [`rockchip-linux/kernel`](https://github.com/rockchip-linux/kernel/tree/develop-6.1) repository. The source snapshot checked for this guide is `77168c8d5ab82399f65a80e9f807b50ba37cf483`. The sound card, external CODEC/amp, clock-master roles, and routes depend on the target board DTS, schematic, and `.config`.
+
+## RK3588 + Rockchip 6.1 source entry points
+
+- [`rk3588.dtsi`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi) defines I2S/TDM controller nodes such as `rockchip,rk3588-i2s-tdm`. Follow the enabled controller into the board DTS and check pinctrl, clocks, DMA, and sound-card links.
+- The CPU DAI driver is [`sound/soc/rockchip/rockchip_i2s_tdm.c`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/rockchip/rockchip_i2s_tdm.c). The actual CODEC, amp, machine/link, DAI format, and MCLK/BCLK/LRCLK roles are board-specific; do not treat one development board's route as an RK3588 default.
+- AEC, echo paths, and audio-quality algorithms usually belong to the product's DSP/HAL/userspace implementation. They cannot be inferred from the SoC I2S driver alone.
+
 ## 1. Playback path and ASoC components
 
 ```text
@@ -64,8 +72,8 @@ AEC (Acoustic Echo Cancellation) needs both the near-end microphone signal and a
 
 For every change, record kernel/device tree, CODEC and amp revisions, control state, DAI format/clocks, PCM parameters, waveforms, sample recordings, and test load. Cover cold boot, rapid start/stop, headphone insertion, volume changes, suspend/resume, concurrent playback/capture, and system load. Test functionality, pops, noise, distortion, and latency separately.
 
-## Official references
+## Official source and documentation (Rockchip Linux 6.1)
 
-- [ALSA SoC Layer Overview](https://docs.kernel.org/sound/soc/overview.html)
-- [ALSA SoC documentation index](https://docs.kernel.org/sound/soc/index.html)
-- [ALSA PCM API](https://docs.kernel.org/sound/kernel-api/alsa-driver-api.html)
+- [Rockchip kernel `develop-6.1` branch](https://github.com/rockchip-linux/kernel/tree/develop-6.1)
+- [RK3588 common device tree](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi)
+- [Rockchip I2S/TDM driver](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/rockchip/rockchip_i2s_tdm.c) · [ASoC docs in the same branch](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/sound/soc) · [CODEC driver directory](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/codecs)

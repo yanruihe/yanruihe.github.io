@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="Memory/DMA lifetime, crash evidence, and low-speed bus debugging">
+  <meta name="description" content="RK3588 Rockchip Linux 6.1 memory, DMA, crash, and bus debugging">
   <meta name="author" content="yanruihe">
   <title>Linux Kernel Memory Management and Crash Analysis | Rui&#39;s Blog</title>
   <link rel="stylesheet" href="/css/style.css">
@@ -19,9 +19,18 @@
   </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
   <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
     <div class="article-title"><span class="title-hover-animation">Linux Kernel Memory Management and Crash Analysis</span></div>
-    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">Updated 2026-09-24 &#183; Memory/DMA lifetime, crash evidence, and low-speed bus debugging</div></div></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">Updated 2026-09-24 &#183; RK3588 / Rockchip Linux develop-6.1 kernel debugging</div></div></div>
     <div class="article-content keep-markdown-body kb-topic-body">
 <div class="kb-lead"><p>The goal is not to memorize APIs. It is to build a path from symptoms and preserved evidence to object lifetime, concurrency, memory source, and hardware transactions. A driver panic often exposes an earlier out-of-bounds access, use-after-free, bad DMA address, or race only later.</p></div>
+<blockquote>
+<p><strong>Platform/source baseline:</strong> Rockchip RK3588 and the <code>develop-6.1</code> branch of the official <a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1"><code>rockchip-linux/kernel</code></a> repository. The source snapshot checked for this guide is <code>77168c8d5ab82399f65a80e9f807b50ba37cf483</code>. Analysis requires the exact source commit, <code>.config</code>, DTS, <code>vmlinux</code>, and module symbols for the image under investigation. Reserved memory, CMA, IOMMU, peripheral DMA capabilities, and detector options depend on the board configuration.</p>
+</blockquote>
+<h2 id="rk3588-rockchip-6.1-debugging-baseline">RK3588 + Rockchip 6.1 debugging baseline</h2>
+<ul>
+<li>Start with the matching board DTS and <code>.config</code> to confirm <code>reserved-memory</code>, CMA, IOMMU/DMA mask, console, and actual pstore/ramoops or kdump setup. Do not copy one RK3588 development board's memory layout to another.</li>
+<li>Symbolize an Oops/vmcore with the exact <code>develop-6.1</code> commit and its unstripped <code>vmlinux</code>, modules, <code>System.map</code>, and build ID. A matching branch name does not make build artifacts interchangeable.</li>
+<li>Availability of KASAN, KFENCE, KCSAN, lockdep, and kdump depends on the branch, kernel configuration, boot chain, and available memory. Validate overhead and support on the corresponding RK3588 test image before choosing product settings.</li>
+</ul>
 <h2 id="memory-and-lifetime-concepts-in-drivers">1. Memory and lifetime concepts in drivers</h2>
 <ul>
 <li><strong>Page allocator / slab</strong>: page-sized allocations and caches of common smaller objects serve different sizes. <code>kmalloc</code>/<code>kzalloc</code> are commonly used for small physically contiguous kernel objects; <code>vmalloc</code> provides virtually contiguous memory backed by potentially non-contiguous physical pages. A CPU virtual address is not automatically a device DMA address.</li>
@@ -60,15 +69,15 @@ Validation: minimal reproduction → diagnostics/detectors → fix → original 
 </ol>
 <h2 id="postmortem-template">6. Postmortem template</h2>
 <p>Keep the symptom and reproduction rate, raw crash log, hardware/software versions, matching symbols, suspected lifetime diagram, hypotheses ruled out, detector and measurement results, root-cause evidence, fix diff, regression tests, and remaining risk. Separate “what happened” from “why it happened”; the latter must be supported by evidence.</p>
-<h2 id="official-references">Official references</h2>
+<h2 id="official-source-and-documentation-rockchip-linux-6.1">Official source and documentation (Rockchip Linux 6.1)</h2>
 <ul>
-<li><a href="https://docs.kernel.org/admin-guide/mm/">Linux Memory Management</a></li>
-<li><a href="https://docs.kernel.org/admin-guide/kdump/kdump.html">Kdump crash dump guide</a></li>
-<li><a href="https://docs.kernel.org/dev-tools/kasan.html">KASAN</a> · <a href="https://docs.kernel.org/dev-tools/kfence.html">KFENCE</a> · <a href="https://docs.kernel.org/dev-tools/testing-overview.html">Kernel testing tools</a></li>
-<li><a href="https://docs.kernel.org/driver-api/i2c.html">I2C subsystem</a> · <a href="https://docs.kernel.org/driver-api/spi.html">SPI subsystem</a> · <a href="https://docs.kernel.org/driver-api/serial/driver.html">Serial driver API</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1">Rockchip kernel <code>develop-6.1</code> branch</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi">RK3588 common device tree</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi">RK3588S device tree</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/admin-guide/kdump/kdump.rst">Kdump documentation in this branch</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/dev-tools/kasan.rst">KASAN</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/dev-tools/kfence.rst">KFENCE</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/i2c.rst">I2C driver documentation</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/spi.rst">SPI driver documentation</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/serial/driver.rst">Serial driver documentation</a></li>
 </ul>
 
-    </div>
+</div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Powered by Hexo | Knowledge Base</div></div></footer></div>
 </div></main>

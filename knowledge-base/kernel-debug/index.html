@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="内存/DMA 生命周期、崩溃留证与低速总线调试">
+  <meta name="description" content="RK3588 Rockchip Linux 6.1：内存、DMA、崩溃分析与总线调试">
   <meta name="author" content="yanruihe">
   <title>Linux 内核内存管理与崩溃分析 | Rui&#39;s Blog</title>
   <link rel="stylesheet" href="/css/style.css">
@@ -19,9 +19,18 @@
   </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">首页</a></li><li class="drawer-menu-item flex-center"><a href="/archives">归档</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/">知识库</a></li><li class="drawer-menu-item flex-center"><a href="/about">关于</a></li></ul></div><div class="window-mask"></div></header></div>
   <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
     <div class="article-title"><span class="title-hover-animation">Linux 内核内存管理与崩溃分析</span></div>
-    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">更新于 2026-09-24 &#183; 内存/DMA 生命周期、崩溃留证与低速总线调试</div></div></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">更新于 2026-09-24 &#183; RK3588 / Rockchip Linux develop-6.1 内核调试</div></div></div>
     <div class="article-content keep-markdown-body kb-topic-body">
 <div class="kb-lead"><p>这条专题的目标不是背 API，而是建立从“症状和现场证据”到“对象生命周期、并发、内存来源和硬件事务”的根因分析路径。驱动 panic 经常是更早发生的越界、释放后使用、DMA 地址错误或竞态在稍后暴露。</p></div>
+<blockquote>
+<p><strong>平台与源码基线：</strong> Rockchip RK3588，官方 <a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1"><code>rockchip-linux/kernel</code></a> 的 <code>develop-6.1</code> 分支；本文核对的代码快照为 <code>77168c8d5ab82399f65a80e9f807b50ba37cf483</code>。分析必须使用与现场镜像完全匹配的源码提交、<code>.config</code>、DTS、<code>vmlinux</code> 和模块符号；内存保留区、CMA、IOMMU、外设 DMA 能力及检测器选项由具体板级配置决定。</p>
+</blockquote>
+<h2 id="rk3588-rockchip-6.1">RK3588 + Rockchip 6.1 调试基线</h2>
+<ul>
+<li>从对应板卡 DTS 和 <code>.config</code> 入手确认 <code>reserved-memory</code>、CMA、IOMMU/DMA mask、console、pstore/ramoops 或 kdump 的实际配置；不要把某个 RK3588 开发板的内存布局套到其他板卡。</li>
+<li>Oops/vmcore 符号化时使用产生该镜像的精确 <code>develop-6.1</code> commit、未剥离 <code>vmlinux</code>、模块、<code>System.map</code> 与 build ID。分支名相同并不代表构建产物可互换。</li>
+<li>KASAN、KFENCE、KCSAN、lockdep 和 kdump 等支持受该分支代码、内核配置、启动链与可用内存共同约束；先在对应 RK3588 测试镜像验证开销与可用性，再决定产品配置。</li>
+</ul>
 <h2 id="section">1. 驱动中常见的内存与生命周期</h2>
 <ul>
 <li><strong>页分配器 / slab</strong>：大块页、常见小对象缓存分别服务不同粒度；<code>kmalloc</code>、<code>kzalloc</code> 常用于物理连续的小块内核对象，<code>vmalloc</code> 提供虚拟连续但物理页可不连续的区域。DMA 场景不能把“CPU 有虚拟地址”当成设备可用 DMA 地址。</li>
@@ -60,15 +69,15 @@
 </ol>
 <h2 id="section-4">6. 复盘模板</h2>
 <p>保存：症状与复现率、崩溃原始日志、硬件/软件版本、匹配符号制品、可疑对象生命周期图、排除过的假设、检测器和测量结果、根因证据、修复 diff、回归测试与剩余风险。把“发生了什么”与“为什么发生”分开写，后者必须由证据支持。</p>
-<h2 id="section-5">官方参考</h2>
+<h2 id="rockchip-linux-6.1">官方源码与文档（Rockchip Linux 6.1）</h2>
 <ul>
-<li><a href="https://docs.kernel.org/admin-guide/mm/">Linux Memory Management</a></li>
-<li><a href="https://docs.kernel.org/admin-guide/kdump/kdump.html">Kdump crash dump guide</a></li>
-<li><a href="https://docs.kernel.org/dev-tools/kasan.html">KASAN</a> · <a href="https://docs.kernel.org/dev-tools/kfence.html">KFENCE</a> · <a href="https://docs.kernel.org/dev-tools/testing-overview.html">Kernel testing tools</a></li>
-<li><a href="https://docs.kernel.org/driver-api/i2c.html">I2C subsystem</a> · <a href="https://docs.kernel.org/driver-api/spi.html">SPI subsystem</a> · <a href="https://docs.kernel.org/driver-api/serial/driver.html">Serial driver API</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1">Rockchip kernel <code>develop-6.1</code> 分支</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi">RK3588 公共设备树</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi">RK3588S 设备树</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/admin-guide/kdump/kdump.rst">同分支 kdump 文档</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/dev-tools/kasan.rst">KASAN</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/dev-tools/kfence.rst">KFENCE</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/i2c.rst">I2C 驱动文档</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/spi.rst">SPI 驱动文档</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/serial/driver.rst">串口驱动文档</a></li>
 </ul>
 
-    </div>
+</div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">由 Hexo 驱动 | 知识库页面</div></div></footer></div>
 </div></main>

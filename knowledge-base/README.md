@@ -2,6 +2,8 @@
 
 这是一套面向嵌入式 Linux 开发的可检索知识库，覆盖 Git/Yocto 工作流、板级网络/音频/存储 bring-up，以及内核内存和崩溃定位。
 
+硬件与驱动专题统一以 Rockchip RK3588、[`rockchip-linux/kernel` `develop-6.1` 分支](https://github.com/rockchip-linux/kernel/tree/develop-6.1) 为源码基线。具体器件、设备树、内核配置与可用功能仍以目标板为准；专题中链接的源码快照为 `77168c8d5ab82399f65a80e9f807b50ba37cf483`。
+
 ## 内容入口
 
 | 专题 | 解决的问题 | 线上页面 |

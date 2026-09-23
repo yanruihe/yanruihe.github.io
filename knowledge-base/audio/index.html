@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="PCM / I2S、CODEC、音质和回音问题的排查路径">
+  <meta name="description" content="RK3588 Rockchip Linux 6.1：ALSA、I2S/TDM、CODEC 与音频调试">
   <meta name="author" content="yanruihe">
   <title>Linux 音频驱动：ALSA、ASoC 与 CODEC | Rui&#39;s Blog</title>
   <link rel="stylesheet" href="/css/style.css">
@@ -19,9 +19,18 @@
   </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">首页</a></li><li class="drawer-menu-item flex-center"><a href="/archives">归档</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/">知识库</a></li><li class="drawer-menu-item flex-center"><a href="/about">关于</a></li></ul></div><div class="window-mask"></div></header></div>
   <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
     <div class="article-title"><span class="title-hover-animation">Linux 音频驱动：ALSA、ASoC 与 CODEC</span></div>
-    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">更新于 2026-09-24 &#183; PCM / I2S、CODEC、音质和回音问题的排查路径</div></div></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">更新于 2026-09-24 &#183; RK3588 / Rockchip Linux develop-6.1 音频驱动</div></div></div>
     <div class="article-content keep-markdown-body kb-topic-body">
 <div class="kb-lead"><p>本文从“数字音频为什么无声、失真、爆音”出发，建立可执行的排查路径。嵌入式音频不是只把 CODEC 驱动 probe 成功：CPU DAI、CODEC DAI、机器连接、时钟、DMA、DAPM 路径、模拟供电和用户态参数必须同时成立。</p></div>
+<blockquote>
+<p><strong>平台与源码基线：</strong> Rockchip RK3588，官方 <a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1"><code>rockchip-linux/kernel</code></a> 的 <code>develop-6.1</code> 分支；本文核对的代码快照为 <code>77168c8d5ab82399f65a80e9f807b50ba37cf483</code>。板级声卡、外置 CODEC/功放、时钟主从与路由以目标板 DTS、原理图和 <code>.config</code> 为准。</p>
+</blockquote>
+<h2 id="rk3588-rockchip-6.1">RK3588 + Rockchip 6.1 代码入口</h2>
+<ul>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi"><code>rk3588.dtsi</code></a> 定义了如 <code>rockchip,rk3588-i2s-tdm</code> 的 I2S/TDM 控制器节点；在板级 DTS 中继续追踪被启用的控制器、pinctrl、时钟、DMA 和声卡 link。</li>
+<li>CPU DAI 驱动入口是 <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/rockchip/rockchip_i2s_tdm.c"><code>sound/soc/rockchip/rockchip_i2s_tdm.c</code></a>。目标 CODEC、功放、声卡 machine/link、DAI 格式及 MCLK/BCLK/LRCLK 角色由具体板卡决定；不要把某一开发板的音频路由当作 RK3588 固定配置。</li>
+<li>AEC、回声路径和音质算法通常属于产品音频 DSP/HAL/用户态实现，不能仅凭 SoC I2S 驱动推定其已提供。</li>
+</ul>
 <h2 id="asoc">1. 播放链路与 ASoC 组件</h2>
 <pre class="kb-code"><code class="language-text">应用/aplay → ALSA PCM → DMA/platform → CPU DAI (I2S/PCM) ⇄ CODEC DAI → DAC/模拟输出/功放
                                       Machine driver 描述板级连接与时钟/控制
@@ -86,14 +95,14 @@ arecord -D hw:0,0 -f S16_LE -r 48000 -c 2 -d 5 capture.wav
 <p>AEC（Acoustic Echo Cancellation）需要麦克风近端信号和扬声器播放参考信号，并依赖稳定的时戳、采样率、双工路由与延迟模型。它常由 DSP、音频 HAL 或用户态音频处理链实现，并非 CODEC 上一个通用开关就能解决。调试时记录播放参考与麦克风采样的时间对齐、设备/声学路径延迟、双讲场景、回声尾长和残余回声；先确认参考信号确实送到 AEC、录音路径确实经过 AEC，再评估算法参数和声学结构。</p>
 <h2 id="section-1">6. 验证清单</h2>
 <p>每次改动记录内核/设备树、CODEC 与功放版本、控件状态、DAI 格式/时钟、PCM 参数、波形、录音/回放样本及测试负载。覆盖冷启动、快速启停、耳机插拔、音量变化、休眠恢复、播放录音并发和高负载；分别验证功能、爆音、噪声、失真与延迟。</p>
-<h2 id="section-2">官方参考</h2>
+<h2 id="rockchip-linux-6.1">官方源码与文档（Rockchip Linux 6.1）</h2>
 <ul>
-<li><a href="https://docs.kernel.org/sound/soc/overview.html">ALSA SoC Layer Overview</a></li>
-<li><a href="https://docs.kernel.org/sound/soc/index.html">ALSA SoC documentation index</a></li>
-<li><a href="https://docs.kernel.org/sound/kernel-api/alsa-driver-api.html">ALSA PCM API</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1">Rockchip kernel <code>develop-6.1</code> 分支</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi">RK3588 公共设备树</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/rockchip/rockchip_i2s_tdm.c">Rockchip I2S/TDM 驱动</a> · <a href="https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/sound/soc">同分支 ASoC 文档</a> · <a href="https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/codecs">CODEC 驱动目录</a></li>
 </ul>
 
-    </div>
+</div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">由 Hexo 驱动 | 知识库页面</div></div></footer></div>
 </div></main>

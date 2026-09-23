@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="Troubleshooting PCM / I2S, CODECs, audio quality, and echo">
+  <meta name="description" content="RK3588 Rockchip Linux 6.1 ALSA, I2S/TDM, CODECs, and audio debugging">
   <meta name="author" content="yanruihe">
   <title>Linux Audio Drivers: ALSA, ASoC, and CODECs | Rui&#39;s Blog</title>
   <link rel="stylesheet" href="/css/style.css">
@@ -19,9 +19,18 @@
   </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
   <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
     <div class="article-title"><span class="title-hover-animation">Linux Audio Drivers: ALSA, ASoC, and CODECs</span></div>
-    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">Updated 2026-09-24 &#183; Troubleshooting PCM / I2S, CODECs, audio quality, and echo</div></div></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">Updated 2026-09-24 &#183; RK3588 / Rockchip Linux develop-6.1 audio drivers</div></div></div>
     <div class="article-content keep-markdown-body kb-topic-body">
 <div class="kb-lead"><p>This guide starts from practical symptoms—silence, distortion, and pops—and builds a repeatable debugging path. An embedded sound card is more than a CODEC driver that probes successfully: the CPU DAI, CODEC DAI, machine connections, clocks, DMA, DAPM route, analog rails, and userspace parameters must all line up.</p></div>
+<blockquote>
+<p><strong>Platform/source baseline:</strong> Rockchip RK3588 and the <code>develop-6.1</code> branch of the official <a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1"><code>rockchip-linux/kernel</code></a> repository. The source snapshot checked for this guide is <code>77168c8d5ab82399f65a80e9f807b50ba37cf483</code>. The sound card, external CODEC/amp, clock-master roles, and routes depend on the target board DTS, schematic, and <code>.config</code>.</p>
+</blockquote>
+<h2 id="rk3588-rockchip-6.1-source-entry-points">RK3588 + Rockchip 6.1 source entry points</h2>
+<ul>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi"><code>rk3588.dtsi</code></a> defines I2S/TDM controller nodes such as <code>rockchip,rk3588-i2s-tdm</code>. Follow the enabled controller into the board DTS and check pinctrl, clocks, DMA, and sound-card links.</li>
+<li>The CPU DAI driver is <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/rockchip/rockchip_i2s_tdm.c"><code>sound/soc/rockchip/rockchip_i2s_tdm.c</code></a>. The actual CODEC, amp, machine/link, DAI format, and MCLK/BCLK/LRCLK roles are board-specific; do not treat one development board's route as an RK3588 default.</li>
+<li>AEC, echo paths, and audio-quality algorithms usually belong to the product's DSP/HAL/userspace implementation. They cannot be inferred from the SoC I2S driver alone.</li>
+</ul>
 <h2 id="playback-path-and-asoc-components">1. Playback path and ASoC components</h2>
 <pre class="kb-code"><code class="language-text">Application/aplay → ALSA PCM → DMA/platform → CPU DAI (I2S/PCM) ⇄ CODEC DAI → DAC/analog output/amp
                                          Machine driver describes board links, clocks, and controls
@@ -86,14 +95,14 @@ arecord -D hw:0,0 -f S16_LE -r 48000 -c 2 -d 5 capture.wav
 <p>AEC (Acoustic Echo Cancellation) needs both the near-end microphone signal and a playback reference, with stable timestamps, sample rate, full-duplex routing, and a latency model. It is often implemented in DSP, an audio HAL, or a userspace processing chain—not as a universal CODEC switch. Record alignment between the playback reference and microphone capture, device/acoustic path latency, double-talk behavior, tail length, and residual echo. First prove that the reference reaches AEC and capture actually passes through it; only then tune algorithm parameters or acoustics.</p>
 <h2 id="verification-checklist">6. Verification checklist</h2>
 <p>For every change, record kernel/device tree, CODEC and amp revisions, control state, DAI format/clocks, PCM parameters, waveforms, sample recordings, and test load. Cover cold boot, rapid start/stop, headphone insertion, volume changes, suspend/resume, concurrent playback/capture, and system load. Test functionality, pops, noise, distortion, and latency separately.</p>
-<h2 id="official-references">Official references</h2>
+<h2 id="official-source-and-documentation-rockchip-linux-6.1">Official source and documentation (Rockchip Linux 6.1)</h2>
 <ul>
-<li><a href="https://docs.kernel.org/sound/soc/overview.html">ALSA SoC Layer Overview</a></li>
-<li><a href="https://docs.kernel.org/sound/soc/index.html">ALSA SoC documentation index</a></li>
-<li><a href="https://docs.kernel.org/sound/kernel-api/alsa-driver-api.html">ALSA PCM API</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1">Rockchip kernel <code>develop-6.1</code> branch</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi">RK3588 common device tree</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/rockchip/rockchip_i2s_tdm.c">Rockchip I2S/TDM driver</a> · <a href="https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/sound/soc">ASoC docs in the same branch</a> · <a href="https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/codecs">CODEC driver directory</a></li>
 </ul>
 
-    </div>
+</div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Powered by Hexo | Knowledge Base</div></div></footer></div>
 </div></main>

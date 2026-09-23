@@ -2,6 +2,14 @@
 
 本文从“数字音频为什么无声、失真、爆音”出发，建立可执行的排查路径。嵌入式音频不是只把 CODEC 驱动 probe 成功：CPU DAI、CODEC DAI、机器连接、时钟、DMA、DAPM 路径、模拟供电和用户态参数必须同时成立。
 
+> **平台与源码基线：** Rockchip RK3588，官方 [`rockchip-linux/kernel`](https://github.com/rockchip-linux/kernel/tree/develop-6.1) 的 `develop-6.1` 分支；本文核对的代码快照为 `77168c8d5ab82399f65a80e9f807b50ba37cf483`。板级声卡、外置 CODEC/功放、时钟主从与路由以目标板 DTS、原理图和 `.config` 为准。
+
+## RK3588 + Rockchip 6.1 代码入口
+
+- [`rk3588.dtsi`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi) 定义了如 `rockchip,rk3588-i2s-tdm` 的 I2S/TDM 控制器节点；在板级 DTS 中继续追踪被启用的控制器、pinctrl、时钟、DMA 和声卡 link。
+- CPU DAI 驱动入口是 [`sound/soc/rockchip/rockchip_i2s_tdm.c`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/rockchip/rockchip_i2s_tdm.c)。目标 CODEC、功放、声卡 machine/link、DAI 格式及 MCLK/BCLK/LRCLK 角色由具体板卡决定；不要把某一开发板的音频路由当作 RK3588 固定配置。
+- AEC、回声路径和音质算法通常属于产品音频 DSP/HAL/用户态实现，不能仅凭 SoC I2S 驱动推定其已提供。
+
 ## 1. 播放链路与 ASoC 组件
 
 ```text
@@ -64,8 +72,8 @@ AEC（Acoustic Echo Cancellation）需要麦克风近端信号和扬声器播放
 
 每次改动记录内核/设备树、CODEC 与功放版本、控件状态、DAI 格式/时钟、PCM 参数、波形、录音/回放样本及测试负载。覆盖冷启动、快速启停、耳机插拔、音量变化、休眠恢复、播放录音并发和高负载；分别验证功能、爆音、噪声、失真与延迟。
 
-## 官方参考
+## 官方源码与文档（Rockchip Linux 6.1）
 
-- [ALSA SoC Layer Overview](https://docs.kernel.org/sound/soc/overview.html)
-- [ALSA SoC documentation index](https://docs.kernel.org/sound/soc/index.html)
-- [ALSA PCM API](https://docs.kernel.org/sound/kernel-api/alsa-driver-api.html)
+- [Rockchip kernel `develop-6.1` 分支](https://github.com/rockchip-linux/kernel/tree/develop-6.1)
+- [RK3588 公共设备树](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi)
+- [Rockchip I2S/TDM 驱动](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/rockchip/rockchip_i2s_tdm.c) · [同分支 ASoC 文档](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/sound/soc) · [CODEC 驱动目录](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/codecs)

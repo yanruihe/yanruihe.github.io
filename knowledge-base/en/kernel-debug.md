@@ -2,6 +2,14 @@
 
 The goal is not to memorize APIs. It is to build a path from symptoms and preserved evidence to object lifetime, concurrency, memory source, and hardware transactions. A driver panic often exposes an earlier out-of-bounds access, use-after-free, bad DMA address, or race only later.
 
+> **Platform/source baseline:** Rockchip RK3588 and the `develop-6.1` branch of the official [`rockchip-linux/kernel`](https://github.com/rockchip-linux/kernel/tree/develop-6.1) repository. The source snapshot checked for this guide is `77168c8d5ab82399f65a80e9f807b50ba37cf483`. Analysis requires the exact source commit, `.config`, DTS, `vmlinux`, and module symbols for the image under investigation. Reserved memory, CMA, IOMMU, peripheral DMA capabilities, and detector options depend on the board configuration.
+
+## RK3588 + Rockchip 6.1 debugging baseline
+
+- Start with the matching board DTS and `.config` to confirm `reserved-memory`, CMA, IOMMU/DMA mask, console, and actual pstore/ramoops or kdump setup. Do not copy one RK3588 development board's memory layout to another.
+- Symbolize an Oops/vmcore with the exact `develop-6.1` commit and its unstripped `vmlinux`, modules, `System.map`, and build ID. A matching branch name does not make build artifacts interchangeable.
+- Availability of KASAN, KFENCE, KCSAN, lockdep, and kdump depends on the branch, kernel configuration, boot chain, and available memory. Validate overhead and support on the corresponding RK3588 test image before choosing product settings.
+
 ## 1. Memory and lifetime concepts in drivers
 
 - **Page allocator / slab**: page-sized allocations and caches of common smaller objects serve different sizes. `kmalloc`/`kzalloc` are commonly used for small physically contiguous kernel objects; `vmalloc` provides virtually contiguous memory backed by potentially non-contiguous physical pages. A CPU virtual address is not automatically a device DMA address.
@@ -59,9 +67,9 @@ Check baud rate, data/parity/stop bits, TTL versus RS-232/RS-485 transceiver lev
 
 Keep the symptom and reproduction rate, raw crash log, hardware/software versions, matching symbols, suspected lifetime diagram, hypotheses ruled out, detector and measurement results, root-cause evidence, fix diff, regression tests, and remaining risk. Separate “what happened” from “why it happened”; the latter must be supported by evidence.
 
-## Official references
+## Official source and documentation (Rockchip Linux 6.1)
 
-- [Linux Memory Management](https://docs.kernel.org/admin-guide/mm/)
-- [Kdump crash dump guide](https://docs.kernel.org/admin-guide/kdump/kdump.html)
-- [KASAN](https://docs.kernel.org/dev-tools/kasan.html) · [KFENCE](https://docs.kernel.org/dev-tools/kfence.html) · [Kernel testing tools](https://docs.kernel.org/dev-tools/testing-overview.html)
-- [I2C subsystem](https://docs.kernel.org/driver-api/i2c.html) · [SPI subsystem](https://docs.kernel.org/driver-api/spi.html) · [Serial driver API](https://docs.kernel.org/driver-api/serial/driver.html)
+- [Rockchip kernel `develop-6.1` branch](https://github.com/rockchip-linux/kernel/tree/develop-6.1)
+- [RK3588 common device tree](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi) · [RK3588S device tree](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi)
+- [Kdump documentation in this branch](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/admin-guide/kdump/kdump.rst) · [KASAN](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/dev-tools/kasan.rst) · [KFENCE](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/dev-tools/kfence.rst)
+- [I2C driver documentation](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/i2c.rst) · [SPI driver documentation](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/spi.rst) · [Serial driver documentation](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/serial/driver.rst)

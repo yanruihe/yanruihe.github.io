@@ -2,6 +2,15 @@
 
 This topic focuses on board-level network bring-up: start with the device-tree and MAC/PHY topology, then verify link, protocol, and userspace layers in order. RGMII and SGMII describe interfaces between a MAC and a PHY/PCS; they are not the cable-side Ethernet medium. Timing, clocks, reset, and the peer configuration must be checked together.
 
+> **Platform/source baseline:** Rockchip RK3588 and the `develop-6.1` branch of the official [`rockchip-linux/kernel`](https://github.com/rockchip-linux/kernel/tree/develop-6.1) repository. The source snapshot checked for this guide is `77168c8d5ab82399f65a80e9f807b50ba37cf483`. This is a moving branch: record the actual kernel commit, board DTS, and `.config` when reproducing. PHY, switch, Wi-Fi module, and interface capabilities are board-specific.
+
+## RK3588 + Rockchip 6.1 source entry points
+
+- Start with [`rk3588.dtsi`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi) / [`rk3588s.dtsi`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi), then follow the enabled GMAC node into the target board DTS. Check `compatible`, `phy-mode`, MDIO, PHY address, clocks, reset, pinctrl, and delay configuration. The SoC DTSI is common description, not a substitute for board wiring.
+- RK3588 GMAC compatibles include `rockchip,rk3588-gmac` and a Synopsys DWMAC compatible. Do not infer the active glue driver from a filename: follow this branch's `of_match_table`, probe path, and MAC/PCS driver before deciding whether the board supports RGMII or SGMII.
+- The branch contains the vendor wireless directory [`drivers/net/wireless/rockchip_wlan/rkwifi/`](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/net/wireless/rockchip_wlan/rkwifi). The actual driver, firmware, bus, and cfg80211/mac80211/FullMAC path depend on the module part number and product configuration; this is not a default Wi-Fi implementation for every RK3588 board.
+- Automotive 100BASE-T1/1000BASE-T1 also requires a compatible external PHY/switch, board interface, and peer. It is not a default integrated RK3588 capability.
+
 ## 1. Separate the data paths
 
 A wired path is broadly:
@@ -69,9 +78,9 @@ Automotive Ethernet is not complete just because a conventional Ethernet PHY is 
 
 Record the board/schematic revision, SoC and PHY/Wi-Fi part numbers, kernel and device-tree commits, PHY address/interface mode, power/clock/reset, firmware version, peer configuration, reproduction conditions, logs, and test results. State what was observed, what was ruled out, what changed, and how to revert it; avoid a bare “network works” conclusion.
 
-## Official references
+## Official source references (Rockchip Linux 6.1)
 
-- [Linux PHY Abstraction Layer](https://docs.kernel.org/networking/phy.html)
-- [Linux PHY link topology](https://docs.kernel.org/networking/phy-link-topology.html)
-- [cfg80211 subsystem](https://docs.kernel.org/driver-api/80211/cfg80211.html)
-- [Linux Wireless: mac80211](https://wireless.docs.kernel.org/en/latest/en/developers/documentation/mac80211.html)
+- [Rockchip kernel `develop-6.1` branch](https://github.com/rockchip-linux/kernel/tree/develop-6.1)
+- [RK3588 common device tree](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi) · [RK3588S device tree](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi)
+- [DWMAC Rockchip glue source](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/net/ethernet/stmicro/stmmac/dwmac-rk.c) (confirm the actual board binding through its compatible)
+- [Rockchip WLAN driver directory](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/net/wireless/rockchip_wlan/rkwifi)

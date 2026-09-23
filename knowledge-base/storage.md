@@ -2,6 +2,14 @@
 
 本专题厘清三类常被混在一起的对象：eMMC 是带控制器与闪存管理功能的块设备；MTD 面向 NAND/NOR 等原始闪存；ext4、F2FS、UBIFS 处于不同的存储接口之上。选型和调试要先判断底层设备暴露的是块语义还是原始闪存语义。
 
+> **平台与源码基线：** Rockchip RK3588，官方 [`rockchip-linux/kernel`](https://github.com/rockchip-linux/kernel/tree/develop-6.1) 的 `develop-6.1` 分支；本文核对的代码快照为 `77168c8d5ab82399f65a80e9f807b50ba37cf483`。eMMC 型号、总线模式、分区表及是否存在 SPI/raw flash 均由具体板卡和产品配置决定。
+
+## RK3588 + Rockchip 6.1 代码入口
+
+- RK3588S 公共 DTSI 中的 eMMC host 节点 compatible 为 `rockchip,rk3588-dwcmshc` / `rockchip,dwcmshc-sdhci`；从 [`rk3588s.dtsi`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi) 继续追到目标板 DTS 的 status、pinctrl、bus-width、max-frequency、供电与时序配置。对应 host 实现应先查 [`sdhci-of-dwcmshc.c`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/mmc/host/sdhci-of-dwcmshc.c)，而不是默认套用同仓库其他 Rockchip MMC host glue。
+- MMC 协议与卡初始化路径从 [`drivers/mmc/core/mmc.c`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/mmc/core/mmc.c) 和 [`mmc_ops.c`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/mmc/core/mmc_ops.c) 追踪，再结合目标 eMMC 数据手册、日志与实测波形。
+- RK3588S DTSI 还描述了 Serial Flash Controller；只有板上实际连接并启用匹配的 SPI NOR/SPI NAND 等器件时，才进入 [`spi-rockchip-sfc.c`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/spi/spi-rockchip-sfc.c) 与 MTD/UBI/UBIFS 路径。不能据此推断所有 RK3588 板都带 raw NAND，也不要把 eMMC 当作 MTD。
+
 ## 1. 先区分两条存储栈
 
 ```text
@@ -64,11 +72,10 @@ mtdinfo
 
 典型案例：系统偶发只读挂载。不要马上 `fsck` 或重刷镜像；先保存串口日志，确认 ext4/F2FS 报错前是否有 eMMC timeout/CRC，检查电源跌落、reset、缓存 flush 和写入压力，离线复制数据后再检查介质与文件系统。若底层 I/O 出错，换文件系统未必能解决根因。
 
-## 官方参考
+## 官方源码与文档（Rockchip Linux 6.1）
 
-- [Linux MMC/SD/SDIO support](https://docs.kernel.org/driver-api/mmc/index.html)
-- [MMC tools and mmc-utils](https://docs.kernel.org/driver-api/mmc/mmc-tools.html)
-- [Linux MTD documentation](https://docs.kernel.org/driver-api/mtd/index.html)
-- [ext4 design](https://docs.kernel.org/filesystems/ext4/)
-- [F2FS design](https://docs.kernel.org/filesystems/f2fs.html)
-- [UBIFS and UBI](https://docs.kernel.org/filesystems/ubifs.html)
+- [Rockchip kernel `develop-6.1` 分支](https://github.com/rockchip-linux/kernel/tree/develop-6.1)
+- [RK3588S 设备树](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi)
+- [DWCMSHC host 驱动](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/mmc/host/sdhci-of-dwcmshc.c) · [MMC core](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/mmc/core)
+- [Rockchip SFC 驱动](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/spi/spi-rockchip-sfc.c) · [MTD/UBI 源码](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/mtd)
+- [同分支 MMC 文档](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/mmc) · [UBIFS 文档](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/filesystems/ubifs.rst)

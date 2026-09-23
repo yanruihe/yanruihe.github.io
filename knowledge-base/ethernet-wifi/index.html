@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="RGMII、SGMII、无线驱动与车载以太网调试">
+  <meta name="description" content="RK3588 Rockchip Linux 6.1：以太网 PHY、Wi-Fi 与车载以太网调试">
   <meta name="author" content="yanruihe">
   <title>Linux 以太网 PHY 与 Wi-Fi 调试 | Rui&#39;s Blog</title>
   <link rel="stylesheet" href="/css/style.css">
@@ -19,9 +19,19 @@
   </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">首页</a></li><li class="drawer-menu-item flex-center"><a href="/archives">归档</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/">知识库</a></li><li class="drawer-menu-item flex-center"><a href="/about">关于</a></li></ul></div><div class="window-mask"></div></header></div>
   <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
     <div class="article-title"><span class="title-hover-animation">Linux 以太网 PHY 与 Wi-Fi 调试</span></div>
-    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">更新于 2026-09-24 &#183; RGMII、SGMII、无线驱动与车载以太网调试</div></div></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">更新于 2026-09-24 &#183; RK3588 / Rockchip Linux develop-6.1 网络调试</div></div></div>
     <div class="article-content keep-markdown-body kb-topic-body">
 <div class="kb-lead"><p>这篇专题围绕板级网络 bring-up：从设备树与 MAC/PHY 连接关系出发，逐层确认链路、协议栈和用户态。RGMII、SGMII 是 MAC 与 PHY/PCS 之间的接口模式，不等于网线侧的以太网介质；接口时序、时钟、复位和对端配置必须一起核对。</p></div>
+<blockquote>
+<p><strong>平台与源码基线：</strong> Rockchip RK3588，官方 <a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1"><code>rockchip-linux/kernel</code></a> 的 <code>develop-6.1</code> 分支；本文核对的代码快照为 <code>77168c8d5ab82399f65a80e9f807b50ba37cf483</code>。这是滚动分支，复现时记录实际 kernel commit、板级 DTS 和 <code>.config</code>；PHY、交换芯片、Wi-Fi 模组与接口能力以具体板卡为准。</p>
+</blockquote>
+<h2 id="rk3588-rockchip-6.1">RK3588 + Rockchip 6.1 代码入口</h2>
+<ul>
+<li>从 <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi"><code>rk3588.dtsi</code></a> / <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi"><code>rk3588s.dtsi</code></a> 追到目标板 DTS 中启用的 GMAC 节点，再核对 <code>compatible</code>、<code>phy-mode</code>、MDIO、PHY 地址、时钟、复位、pinctrl 和延迟配置。SoC 的 DTSI 只给出公共描述，不能代替板级连接信息。</li>
+<li>RK3588 GMAC 的 DTS compatible 包含 <code>rockchip,rk3588-gmac</code> 与 Synopsys DWMAC compatible；不要仅凭文件名假设它会匹配某个通用 Rockchip glue 驱动。沿此分支的 <code>of_match_table</code>、probe 路径和最终 MAC/PCS 驱动确认实际绑定，再判断 RGMII/SGMII 是否由该板硬件支持。</li>
+<li>分支中存在 <a href="https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/net/wireless/rockchip_wlan/rkwifi"><code>drivers/net/wireless/rockchip_wlan/rkwifi/</code></a> 厂商无线驱动目录；实际驱动、固件、总线和 cfg80211/mac80211/FullMAC 路径取决于模组料号及产品配置，不能把该目录视为每块 RK3588 板的默认 Wi-Fi 实现。</li>
+<li>车载 100BASE-T1/1000BASE-T1 还需要匹配的外部 PHY/交换芯片、板级接口和对端；它不是 RK3588 SoC 默认集成能力。</li>
+</ul>
 <h2 id="section">1. 先分清数据路径</h2>
 <p>有线数据大致经过：</p>
 <pre class="kb-code"><code class="language-text">SoC MAC ↔ MAC-PHY 接口（RGMII / SGMII 等）↔ PHY ↔ 磁性器件/连接器/线缆 ↔ 对端
@@ -91,15 +101,15 @@ ip link show wlan0
 <p>车载以太网不是“把普通以太网 PHY 配成 100M/1G”就完成。先识别具体物理层（例如 100BASE-T1 或 1000BASE-T1）、PHY/交换芯片、MAC/PCS、主从角色、线束/连接器与对端配置，再依器件数据手册及项目适用的 IEEE / OPEN Alliance 规范执行链路、互操作、线束和 EMC 验证。Linux 侧重点仍是设备树、MDIO、phylib/phylink、PCS、时间同步需求与可观测性；合规测试不能由 <code>ping</code> 或吞吐测试替代。</p>
 <h2 id="section-1">6. 实战记录模板</h2>
 <p>每次 bring-up 至少记录：板卡/原理图版本、SoC 与 PHY/Wi-Fi 芯片料号、内核与设备树提交、PHY 地址/接口模式、供电/时钟/复位、固件版本、对端配置、复现条件、日志与测试结果。结论要写出“观测到什么、排除什么、改了什么、如何回退”，不要只留一句“网络已通”。</p>
-<h2 id="section-2">官方参考</h2>
+<h2 id="rockchip-linux-6.1">官方源码参考（Rockchip Linux 6.1）</h2>
 <ul>
-<li><a href="https://docs.kernel.org/networking/phy.html">Linux PHY Abstraction Layer</a></li>
-<li><a href="https://docs.kernel.org/networking/phy-link-topology.html">Linux PHY link topology</a></li>
-<li><a href="https://docs.kernel.org/driver-api/80211/cfg80211.html">cfg80211 subsystem</a></li>
-<li><a href="https://wireless.docs.kernel.org/en/latest/en/developers/documentation/mac80211.html">Linux Wireless: mac80211</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1">Rockchip kernel <code>develop-6.1</code> 分支</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi">RK3588 公共设备树</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi">RK3588S 设备树</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/net/ethernet/stmicro/stmmac/dwmac-rk.c">DWMAC Rockchip glue source</a>（需按 compatible 确认目标板实际绑定）</li>
+<li><a href="https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/net/wireless/rockchip_wlan/rkwifi">Rockchip WLAN driver directory</a></li>
 </ul>
 
-    </div>
+</div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">由 Hexo 驱动 | 知识库页面</div></div></footer></div>
 </div></main>

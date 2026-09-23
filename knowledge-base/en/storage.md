@@ -2,6 +2,14 @@
 
 This topic separates three concepts that are often conflated: eMMC is a managed block device; MTD targets raw NAND/NOR flash; and ext4, F2FS, and UBIFS sit on different storage interfaces. Choose and debug a stack only after identifying whether the underlying device exposes block semantics or raw-flash semantics.
 
+> **Platform/source baseline:** Rockchip RK3588 and the `develop-6.1` branch of the official [`rockchip-linux/kernel`](https://github.com/rockchip-linux/kernel/tree/develop-6.1) repository. The source snapshot checked for this guide is `77168c8d5ab82399f65a80e9f807b50ba37cf483`. The eMMC part, bus mode, partition table, and presence of SPI/raw flash depend on the board and product configuration.
+
+## RK3588 + Rockchip 6.1 source entry points
+
+- The RK3588S common DTSI describes an eMMC host compatible with `rockchip,rk3588-dwcmshc` / `rockchip,dwcmshc-sdhci`. Start at [`rk3588s.dtsi`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi), then follow the enabled node into the board DTS for status, pinctrl, bus width, max frequency, supplies, and timing. The host implementation to trace is [`sdhci-of-dwcmshc.c`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/mmc/host/sdhci-of-dwcmshc.c); do not default to another Rockchip MMC host glue in the same repository.
+- Follow MMC protocol/card initialization through [`drivers/mmc/core/mmc.c`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/mmc/core/mmc.c) and [`mmc_ops.c`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/mmc/core/mmc_ops.c), alongside the actual eMMC data sheet, logs, and measured waveforms.
+- The RK3588S DTSI also describes a Serial Flash Controller. Only boards with a physically connected and enabled SPI NOR/SPI NAND device use the [`spi-rockchip-sfc.c`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/spi/spi-rockchip-sfc.c) and MTD/UBI/UBIFS path. This does not imply every RK3588 board has raw NAND; eMMC is not MTD.
+
 ## 1. Two different storage stacks
 
 ```text
@@ -64,11 +72,10 @@ For a power-loss/reboot campaign, use a dedicated test board and recoverable ima
 
 Example: the root filesystem occasionally mounts read-only. Do not immediately run `fsck` or reflash. Save the serial log and check whether eMMC timeout/CRC errors precede the ext4/F2FS report. Investigate power dips, reset, cache flush, and write load; copy data offline before examining media and filesystem state. A different filesystem may not fix an underlying I/O fault.
 
-## Official references
+## Official source and documentation (Rockchip Linux 6.1)
 
-- [Linux MMC/SD/SDIO support](https://docs.kernel.org/driver-api/mmc/index.html)
-- [MMC tools and mmc-utils](https://docs.kernel.org/driver-api/mmc/mmc-tools.html)
-- [Linux MTD documentation](https://docs.kernel.org/driver-api/mtd/index.html)
-- [ext4 design](https://docs.kernel.org/filesystems/ext4/)
-- [F2FS design](https://docs.kernel.org/filesystems/f2fs.html)
-- [UBIFS and UBI](https://docs.kernel.org/filesystems/ubifs.html)
+- [Rockchip kernel `develop-6.1` branch](https://github.com/rockchip-linux/kernel/tree/develop-6.1)
+- [RK3588S device tree](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi)
+- [DWCMSHC host driver](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/mmc/host/sdhci-of-dwcmshc.c) · [MMC core](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/mmc/core)
+- [Rockchip SFC driver](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/spi/spi-rockchip-sfc.c) · [MTD/UBI sources](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/mtd)
+- [MMC documentation in the same branch](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/driver-api/mmc) · [UBIFS documentation](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/filesystems/ubifs.rst)

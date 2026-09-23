@@ -2,6 +2,15 @@
 
 这篇专题围绕板级网络 bring-up：从设备树与 MAC/PHY 连接关系出发，逐层确认链路、协议栈和用户态。RGMII、SGMII 是 MAC 与 PHY/PCS 之间的接口模式，不等于网线侧的以太网介质；接口时序、时钟、复位和对端配置必须一起核对。
 
+> **平台与源码基线：** Rockchip RK3588，官方 [`rockchip-linux/kernel`](https://github.com/rockchip-linux/kernel/tree/develop-6.1) 的 `develop-6.1` 分支；本文核对的代码快照为 `77168c8d5ab82399f65a80e9f807b50ba37cf483`。这是滚动分支，复现时记录实际 kernel commit、板级 DTS 和 `.config`；PHY、交换芯片、Wi-Fi 模组与接口能力以具体板卡为准。
+
+## RK3588 + Rockchip 6.1 代码入口
+
+- 从 [`rk3588.dtsi`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi) / [`rk3588s.dtsi`](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi) 追到目标板 DTS 中启用的 GMAC 节点，再核对 `compatible`、`phy-mode`、MDIO、PHY 地址、时钟、复位、pinctrl 和延迟配置。SoC 的 DTSI 只给出公共描述，不能代替板级连接信息。
+- RK3588 GMAC 的 DTS compatible 包含 `rockchip,rk3588-gmac` 与 Synopsys DWMAC compatible；不要仅凭文件名假设它会匹配某个通用 Rockchip glue 驱动。沿此分支的 `of_match_table`、probe 路径和最终 MAC/PCS 驱动确认实际绑定，再判断 RGMII/SGMII 是否由该板硬件支持。
+- 分支中存在 [`drivers/net/wireless/rockchip_wlan/rkwifi/`](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/net/wireless/rockchip_wlan/rkwifi) 厂商无线驱动目录；实际驱动、固件、总线和 cfg80211/mac80211/FullMAC 路径取决于模组料号及产品配置，不能把该目录视为每块 RK3588 板的默认 Wi-Fi 实现。
+- 车载 100BASE-T1/1000BASE-T1 还需要匹配的外部 PHY/交换芯片、板级接口和对端；它不是 RK3588 SoC 默认集成能力。
+
 ## 1. 先分清数据路径
 
 有线数据大致经过：
@@ -69,9 +78,9 @@ ip link show wlan0
 
 每次 bring-up 至少记录：板卡/原理图版本、SoC 与 PHY/Wi-Fi 芯片料号、内核与设备树提交、PHY 地址/接口模式、供电/时钟/复位、固件版本、对端配置、复现条件、日志与测试结果。结论要写出“观测到什么、排除什么、改了什么、如何回退”，不要只留一句“网络已通”。
 
-## 官方参考
+## 官方源码参考（Rockchip Linux 6.1）
 
-- [Linux PHY Abstraction Layer](https://docs.kernel.org/networking/phy.html)
-- [Linux PHY link topology](https://docs.kernel.org/networking/phy-link-topology.html)
-- [cfg80211 subsystem](https://docs.kernel.org/driver-api/80211/cfg80211.html)
-- [Linux Wireless: mac80211](https://wireless.docs.kernel.org/en/latest/en/developers/documentation/mac80211.html)
+- [Rockchip kernel `develop-6.1` 分支](https://github.com/rockchip-linux/kernel/tree/develop-6.1)
+- [RK3588 公共设备树](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588.dtsi) · [RK3588S 设备树](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/boot/dts/rockchip/rk3588s.dtsi)
+- [DWMAC Rockchip glue source](https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/net/ethernet/stmicro/stmmac/dwmac-rk.c)（需按 compatible 确认目标板实际绑定）
+- [Rockchip WLAN driver directory](https://github.com/rockchip-linux/kernel/tree/77168c8d5ab82399f65a80e9f807b50ba37cf483/drivers/net/wireless/rockchip_wlan/rkwifi)
