@@ -27,7 +27,7 @@ A recipe describes how to fetch, patch, configure, compile, install, and package
 
 ## 1. Host and release prerequisites
 
-Use a supported Linux host. The official `core-image-sato` reference lists about 140 GB free disk and 32 GB RAM; a minimal image is generally lighter but still needs ample resources. WSL2 is possible but not officially validated as a build host. On Ubuntu 24.04:
+Use a Linux host listed in the [Yocto 6.0.2 requirements](https://docs.yoctoproject.org/6.0.2/ref-manual/system-requirements.html). The official reference build for `core-image-sato` lists about 140 GB of free disk and 32 GB RAM; this guide builds the smaller `core-image-minimal`. I have verified a successful build on Ubuntu 24.04 under WSL2. For Ubuntu 24.04 in Docker, I recommend allocating 40 GB RAM to Docker. This is a practical recommendation, not an official Yocto minimum. The commands below use Ubuntu 24.04:
 
 ```bash
 sudo apt update

@@ -27,7 +27,7 @@ Recipe 描述一个软件如何获取源码、应用补丁、配置、编译、�
 
 ## 1. 主机准备和版本边界
 
-选择官方支持的 Linux 主机。Yocto 6.0.2 对 `core-image-sato` 的参考配置列出约 140 GB 空闲磁盘和 32 GB 内存；本篇的最小镜像通常更轻，但仍需充足空间。Windows 可使用 WSL2，但官方不把它列为经过验证的构建主机。下面以 Ubuntu 24.04 为例：
+选择[官方支持的 Linux 主机](https://docs.yoctoproject.org/6.0.2/ref-manual/system-requirements.html)。官方对 Yocto 6.0.2 的 `core-image-sato` 参考构建列出约 140 GB 空闲磁盘和 32 GB 内存；本文构建的是较小的 `core-image-minimal`。我已在 WSL2 的 Ubuntu 24.04 上实际构建验证通过。若使用 Docker 运行 Ubuntu 24.04，建议给 Docker 分配 40 GB 内存；这是实践建议，不是 Yocto 官方最低要求。下面以 Ubuntu 24.04 为例：
 
 ```bash
 sudo apt update
