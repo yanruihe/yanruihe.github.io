@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="description" content="Yocto Project、BitBake、Layer、Recipe 和 devtool 使用知识库">
+    <meta name="author" content="yanruihe">
+    <title>Yocto 使用知识库 | Rui&#39;s Blog</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/knowledge-base.css">
+    <link rel="shortcut icon" href="/images/logo.jpg">
+</head>
+<body>
+<main class="page-container"><div class="page-main-content">
+  <div class="page-main-content-top"><header class="header-wrapper"><div class="header-content">
+    <div class="left"><a class="logo-image" href="/"><img src="/images/logo.jpg" alt="Rui"></a><a class="logo-title" href="/">Rui&#39;s Blog</a></div>
+    <div class="right"><div class="pc"><ul class="menu-list"><li class="menu-item"><a href="/">首页</a></li><li class="menu-item"><a href="/archives">归档</a></li><li class="menu-item"><a class="active" href="/knowledge-base/">知识库</a></li><li class="menu-item"><a href="/about">关于</a></li></ul></div><div class="mobile"><div class="icon-item menu-bar"><div class="menu-bar-middle"></div></div></div></div>
+  </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">首页</a></li><li class="drawer-menu-item flex-center"><a href="/archives">归档</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/">知识库</a></li><li class="drawer-menu-item flex-center"><a href="/about">关于</a></li></ul></div><div class="window-mask"></div></header></div>
+  <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
+    <div class="article-title"><span class="title-hover-animation">Yocto 使用知识库</span></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Yocto</span></div><div class="kb-meta">BitBake / Layer / Recipe / Image / devtool</div></div></div>
+    <div class="article-content keep-markdown-body">
+      <div class="kb-lead"><p>把硬件、软件包和发行版配置组织成可复现的系统镜像。</p><p>命令是通用示例，实际构建前必须确认各层与 Yocto 发布分支相互兼容。</p></div>
+      <div class="kb-section"><h2 id="concepts">1. 核心概念</h2><p>Yocto Project 不是一个固定发行版，而是一套用 OpenEmbedded 构建定制 Linux 系统的工具和元数据。</p><ul><li><strong>BitBake</strong>：解析元数据并执行任务。</li><li><strong>Recipe（配方）</strong>：描述源码、依赖、编译、安装和打包方式。</li><li><strong>Layer（层）</strong>：按功能隔离和组合配方、类、机器与发行版配置。</li><li><strong>Machine</strong>：描述目标硬件平台；<strong>Image</strong> 描述最终系统镜像。</li></ul><pre class="kb-code"><code>Layer → Recipe → Package → Image
+  └──── Machine / Distro 配置影响解析与构建结果</code></pre></div>
+      <div class="kb-section"><h2 id="quick-start">2. 初始化与第一次构建</h2><p>下面是通用流程，实际使用时必须让 <code>poky</code>、BSP 层和其他层处于相互兼容的发行版分支：</p><pre class="kb-code"><code>git clone https://git.yoctoproject.org/poky
+cd poky
+git checkout &lt;compatible-release-branch&gt;
+source oe-init-build-env build
+
+bitbake-layers show-layers
+bitbake core-image-minimal</code></pre><p>构建前确认 <code>MACHINE</code>、<code>DISTRO</code>、下载目录和共享状态缓存配置。第一次构建通常需要较长时间，后续构建应尽量复用 <code>DL_DIR</code> 和 <code>SSTATE_DIR</code>。</p></div>
+      <div class="kb-section"><h2 id="layers">3. 创建和接入自定义层</h2><pre class="kb-code"><code>bitbake-layers create-layer ../meta-myproduct
+bitbake-layers add-layer ../meta-myproduct
+bitbake-layers show-layers</code></pre><p>建议把产品定制放在独立层中，不直接修改 <code>poky</code> 或 <code>meta-openembedded</code>。常见结构如下：</p><pre class="kb-code"><code>meta-myproduct/
+├── conf/layer.conf
+├── recipes-apps/demo/demo_1.0.bb
+├── recipes-core/images/myproduct-image.bb
+└── recipes-kernel/linux/linux-%.bbappend</code></pre></div>
+      <div class="kb-section"><h2 id="recipe">4. 配方与镜像</h2><p>配方至少要明确源码、许可证、依赖和构建任务。对现有软件的定制优先使用 <code>.bbappend</code>，避免复制整份上游配方：</p><pre class="kb-code"><code>IMAGE_INSTALL:append = " demo"</code></pre><p>变量覆盖语法与发行版版本有关；升级分支时要检查 override 语法、层兼容性和依赖变化。</p></div>
+      <div class="kb-section"><h2 id="devtool">5. devtool 开发闭环</h2><p>开发应用或修改已有配方时，可用 <code>devtool</code> 缩短“修改—构建—部署—固化”循环：</p><pre class="kb-code"><code>devtool add https://example.com/project.git
+devtool modify &lt;recipe&gt;
+devtool build &lt;recipe&gt;
+devtool deploy-target &lt;recipe&gt; root@&lt;target-ip&gt;
+
+# 源码仓库提交后固化到正式层
+devtool finish &lt;recipe&gt; ../meta-myproduct
+devtool reset &lt;recipe&gt;</code></pre><p>部署到目标机前先确认 SSH、目标架构和运行时依赖；<code>devtool finish</code> 前确认源码仓库已经提交。</p></div>
+      <div class="kb-section"><h2 id="debug">6. 调试清单</h2><pre class="kb-code"><code># 查看最终变量值及其来源
+bitbake -e &lt;recipe&gt; | less
+
+# 查看任务依赖或执行单个任务
+bitbake -g &lt;recipe&gt;
+bitbake &lt;recipe&gt; -c compile
+
+# 进入配方的开发 shell
+bitbake &lt;recipe&gt; -c devshell
+
+# 清理配方后重新构建
+bitbake &lt;recipe&gt; -c cleansstate
+
+# 查询已生成包的文件归属
+oe-pkgdata-util find-path /usr/bin/&lt;program&gt;</code></pre><p>遇到“找不到配方”先检查层是否加入、配方名是否正确；遇到“配置没有生效”先用 <code>bitbake -e</code> 确认变量来源；遇到增量构建异常再有针对性地清理任务。</p></div>
+      <div class="kb-section"><h2 id="release">7. 可复现与发布</h2><ul><li>固定 manifest、层分支或 commit，而不是只记录模糊版本号。</li><li>记录 <code>MACHINE</code>、镜像目标、构建时间、构建主机和关键配置。</li><li>将自定义层、配方、补丁和 <code>conf</code> 配置放入 Git；不要提交 <code>tmp/</code>、<code>downloads/</code>、<code>sstate-cache/</code> 等生成目录。</li><li>发布前完成一次干净环境构建或 CI 验证，并保存镜像校验值。</li></ul></div>
+      <div class="kb-section"><h2>参考资料</h2><p><a href="https://docs.yoctoproject.org/overview-manual/concepts.html" target="_blank" rel="noopener">Yocto Project 概览</a> · <a href="https://docs.yoctoproject.org/dev/dev-manual/layers.html" target="_blank" rel="noopener">创建层</a> · <a href="https://docs.yoctoproject.org/dev-manual/new-recipe.html" target="_blank" rel="noopener">编写新配方</a> · <a href="https://docs.yoctoproject.org/dev-manual/devtool.html" target="_blank" rel="noopener">devtool</a> · <a href="https://docs.yoctoproject.org/bitbake/dev/singleindex.html" target="_blank" rel="noopener">BitBake 文档</a></p><p><a href="/knowledge-base/">返回知识库总览</a> · <a href="/knowledge-base/git/">上一篇：Git 知识库</a></p></div>
+    </div>
+  </div></div></div></div>
+  <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Yocto 使用知识库</div></div></footer></div>
+</div></main>
+</body>
+</html>

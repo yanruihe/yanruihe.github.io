@@ -1,0 +1,87 @@
+.kb-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.2rem;
+  margin: 1.5rem 0 2rem;
+}
+.kb-card {
+  display: block;
+  padding: 1.4rem;
+  color: var(--text-color-3);
+  background: var(--background-color-2);
+  border: 1px solid var(--border-color);
+  border-radius: 0.4rem;
+  text-decoration: none !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.kb-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 2px 4px 12px var(--shadow-hover-color);
+}
+.kb-card h3 {
+  margin-top: 0;
+  color: var(--text-color-2);
+}
+.kb-card p {
+  margin-bottom: 0;
+}
+.kb-lead {
+  padding: 1rem 1.2rem;
+  background: var(--background-color-2);
+  border-left: 0.4rem solid var(--primary-color);
+}
+.kb-lead p:last-child {
+  margin-bottom: 0;
+}
+.kb-meta {
+  color: var(--text-color-4);
+  font-size: 0.95rem;
+}
+.kb-section {
+  margin-top: 2.2rem;
+}
+.kb-section h2 {
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border-color);
+}
+.kb-table {
+  width: 100%;
+  margin: 1rem 0;
+  border-collapse: collapse;
+}
+.kb-table th, .kb-table td {
+  padding: 0.65rem 0.8rem;
+  text-align: left;
+  border: 1px solid var(--border-color);
+}
+.kb-table th {
+  color: var(--text-color-2);
+  background: var(--background-color-2);
+}
+.kb-code {
+  padding: 1rem;
+  overflow-x: auto;
+  color: var(--highlight-foreground);
+  background: var(--highlight-background);
+  border-radius: 0.3rem;
+}
+.kb-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+.kb-links a {
+  padding: 0.45rem 0.8rem;
+  background: var(--background-color-2);
+  border-radius: 0.3rem;
+}
+@media (max-width: 700px) {
+  .kb-card-grid {
+    grid-template-columns: 1fr;
+  }
+  .kb-table {
+    display: block;
+    overflow-x: auto;
+  }
+}

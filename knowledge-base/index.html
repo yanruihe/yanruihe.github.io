@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="description" content="Git 与 Yocto 使用知识库">
+    <meta name="author" content="yanruihe">
+    <title>知识库 | Rui&#39;s Blog</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/knowledge-base.css">
+    <link rel="shortcut icon" href="/images/logo.jpg">
+</head>
+<body>
+<main class="page-container">
+  <div class="page-main-content">
+    <div class="page-main-content-top">
+      <header class="header-wrapper">
+        <div class="header-content">
+          <div class="left">
+            <a class="logo-image" href="/"><img src="/images/logo.jpg" alt="Rui"></a>
+            <a class="logo-title" href="/">Rui&#39;s Blog</a>
+          </div>
+          <div class="right">
+            <div class="pc">
+              <ul class="menu-list">
+                <li class="menu-item"><a href="/">首页</a></li>
+                <li class="menu-item"><a href="/archives">归档</a></li>
+                <li class="menu-item"><a class="active" href="/knowledge-base/">知识库</a></li>
+                <li class="menu-item"><a href="/about">关于</a></li>
+              </ul>
+            </div>
+            <div class="mobile">
+              <div class="icon-item menu-bar"><div class="menu-bar-middle"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="header-drawer">
+          <ul class="drawer-menu-list">
+            <li class="drawer-menu-item flex-center"><a href="/">首页</a></li>
+            <li class="drawer-menu-item flex-center"><a href="/archives">归档</a></li>
+            <li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/">知识库</a></li>
+            <li class="drawer-menu-item flex-center"><a href="/about">关于</a></li>
+          </ul>
+        </div>
+        <div class="window-mask"></div>
+      </header>
+    </div>
+    <div class="page-main-content-middle">
+      <div class="main-content">
+        <div class="post-page-container">
+          <div class="article-content-container">
+            <div class="article-title"><span class="title-hover-animation">知识库</span></div>
+            <div class="article-header">
+              <div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div>
+              <div class="info">
+                <div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div>
+                <div class="kb-meta">更新于 2026-09-23 · Git / Yocto / 嵌入式 Linux</div>
+              </div>
+            </div>
+            <div class="article-content keep-markdown-body">
+              <div class="kb-lead">
+                <p>把零散的工程经验整理成可检索、可复用、可验证的知识。</p>
+                <p>本入口把 Git 协作与 Yocto 构建放在同一条工作流中：用 Git 管理变化，用 Yocto 验证系统产物。</p>
+              </div>
+              <div class="kb-card-grid">
+                <a class="kb-card" href="/knowledge-base/git/">
+                  <h3>Git 知识库</h3>
+                  <p>工作区、分支、提交、同步、回滚，以及与 Yocto 项目协作的提交约定。</p>
+                </a>
+                <a class="kb-card" href="/knowledge-base/yocto/">
+                  <h3>Yocto 使用知识库</h3>
+                  <p>BitBake、Layer、Recipe、Image、devtool 和常见构建调试路径。</p>
+                </a>
+              </div>
+              <div class="kb-section">
+                <h2 id="overview">整合方式</h2>
+                <table class="kb-table">
+                  <thead><tr><th>专题</th><th>记录什么</th><th>何时查阅</th></tr></thead>
+                  <tbody>
+                    <tr><td>Git</td><td>变更边界、提交历史、协作与恢复</td><td>开始修改、准备评审、需要回滚时</td></tr>
+                    <tr><td>Yocto</td><td>层、配方、机器、镜像与构建日志</td><td>新增软件、适配硬件、排查构建时</td></tr>
+                    <tr><td>项目知识</td><td>平台版本、验证命令、已知限制和产物</td><td>交接、复现问题、发布版本时</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="kb-section">
+                <h2 id="workflow">推荐闭环</h2>
+                <ol>
+                  <li>记录问题背景：目标板、分支、机器配置、镜像和复现条件。</li>
+                  <li>提炼最小复现：保留必要的命令、配置和关键日志。</li>
+                  <li>验证并固化：把可复用的修改放进层、配方或文档，并在 Git 中提交。</li>
+                  <li>发布知识：补充验证结果、风险和官方参考链接，再更新静态站点。</li>
+                </ol>
+                <pre class="kb-code"><code>采集问题 → 最小复现 → 验证结果 → Git 提交 → 站点发布</code></pre>
+              </div>
+              <div class="kb-section">
+                <h2 id="convention">记录规范</h2>
+                <ul>
+                  <li><strong>背景</strong>：目标、平台、版本和约束。</li>
+                  <li><strong>操作</strong>：可以复制执行的命令或配置。</li>
+                  <li><strong>验证</strong>：日志、测试命令或可检查的产物。</li>
+                  <li><strong>风险</strong>：版本差异、破坏性操作和回滚方式。</li>
+                  <li><strong>参考</strong>：官方文档、提交记录和关联问题。</li>
+                </ul>
+              </div>
+              <div class="kb-section">
+                <h2>源文档与参考</h2>
+                <p>知识库的 Markdown 源文档保存在仓库中，便于后续通过 Git 评审和扩展。</p>
+                <div class="kb-links">
+                  <a href="https://github.com/yanruihe/yanruihe.github.io/blob/main/knowledge-base/git.md" target="_blank" rel="noopener">Git 源文档</a>
+                  <a href="https://github.com/yanruihe/yanruihe.github.io/blob/main/knowledge-base/yocto.md" target="_blank" rel="noopener">Yocto 源文档</a>
+                  <a href="https://git-scm.com/docs" target="_blank" rel="noopener">Git 官方文档</a>
+                  <a href="https://docs.yoctoproject.org/" target="_blank" rel="noopener">Yocto 官方文档</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="page-main-content-bottom">
+      <footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">由 <a target="_blank" href="https://hexo.io">Hexo</a> 驱动 | 知识库页面</div></div></footer>
+    </div>
+  </div>
+</main>
+</body>
+</html>
