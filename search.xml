@@ -16,6 +16,16 @@
     <content><![CDATA[Yocto Project、BitBake、Layer、Recipe、Machine、Image、devtool、构建调试、可复现发布。]]></content>
   </entry>
   <entry>
+    <title>从零构建嵌入式 Linux：Buildroot</title>
+    <url>/posts/buildroot-from-zero/</url>
+    <content><![CDATA[Buildroot 2025.02.18 LTS 从零构建交叉工具链、Linux 内核、根文件系统，在 QEMU 启动 BusyBox init，加入开机脚本并适配开发板。]]></content>
+  </entry>
+  <entry>
+    <title>从零构建嵌入式 Linux：Yocto</title>
+    <url>/posts/yocto-from-zero/</url>
+    <content><![CDATA[Yocto Project 6.0.2 Wrynose 从零构建 qemux86-64 镜像，添加 meta-demo layer 和 systemd 服务并在 QEMU 验证。]]></content>
+  </entry>
+  <entry>
     <title>Knowledge Base</title>
     <url>/knowledge-base/en/</url>
     <content><![CDATA[Git and Yocto knowledge base. Capture context, reduce to a minimal reproduction, verify, commit, and publish.]]></content>
@@ -29,5 +39,15 @@
     <title>Yocto Knowledge Base</title>
     <url>/knowledge-base/en/yocto/</url>
     <content><![CDATA[Yocto Project, BitBake, layers, recipes, machines, images, devtool, build debugging, reproducibility, and release.]]></content>
+  </entry>
+  <entry>
+    <title>Embedded Linux from scratch: Buildroot</title>
+    <url>/posts/en/buildroot-from-zero/</url>
+    <content><![CDATA[Buildroot 2025.02.18 LTS toolchain, kernel, root filesystem, QEMU boot, BusyBox init, and hardware porting.]]></content>
+  </entry>
+  <entry>
+    <title>Embedded Linux from scratch: Yocto</title>
+    <url>/posts/en/yocto-from-zero/</url>
+    <content><![CDATA[Yocto Project 6.0.2 Wrynose qemux86-64 image, meta-demo layer, systemd service, QEMU, and hardware porting.]]></content>
   </entry>
 </search>

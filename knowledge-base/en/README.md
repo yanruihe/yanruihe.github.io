@@ -9,6 +9,8 @@ This is a searchable knowledge base for embedded Linux development. It connects 
 | Git | Change tracking, collaboration, recovery, and publishing |
 | Yocto | Layers, recipes, images, devtool, and build debugging |
 
+From-zero build series: [Buildroot 2025.02.18](../../posts/en/buildroot-from-zero/) · [Yocto 6.0.2](../../posts/en/yocto-from-zero/).
+
 ## Record format
 
 1. **Context**: goal, platform, version, and constraints.

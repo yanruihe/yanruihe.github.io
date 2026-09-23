@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Build and boot Embedded Linux from scratch using Buildroot 2025.02.18 and QEMU"><title>Embedded Linux from scratch: Buildroot | Rui&#39;s Blog</title><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/i18n.css"><link rel="stylesheet" href="/css/knowledge-base.css"><link rel="shortcut icon" href="/images/logo.jpg"></head>
+<body><main class="page-container"><div class="page-main-content">
+  <div class="page-main-content-top"><header class="header-wrapper"><div class="header-content"><div class="left"><a class="logo-image" href="/"><img src="/images/logo.jpg" alt="Rui"></a><a class="logo-title" href="/">Rui&#39;s Blog</a></div><div class="right"><div class="pc"><ul class="menu-list"><li class="menu-item"><a href="/">Home</a></li><li class="menu-item"><a href="/archives">Archives</a></li><li class="menu-item"><a href="/knowledge-base/en/">Knowledge Base</a></li><li class="menu-item"><a href="/about">About</a></li></ul></div></div></div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
+  <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
+    <div class="article-title"><span class="title-hover-animation">Embedded Linux from scratch: Buildroot</span></div><div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Buildroot</span></div><div class="kb-meta">2026-09-23 · Buildroot 2025.02.18 LTS · QEMU x86_64</div></div></div>
+    <div class="article-content keep-markdown-body">
+      <div class="kb-lead"><p>Build a toolchain, Linux kernel, and root filesystem from source, then boot the result in QEMU. Virtual firmware handles early boot here; a real ARM board still needs its own bootloader, device tree, drivers, and BSP.</p><p><a href="#host">Host</a> · <a href="#build">Build</a> · <a href="#boot">Boot</a> · <a href="#custom">Customize</a> · <a href="#hardware">Hardware</a></p></div>
+      <div class="kb-section"><h2 id="host">1. Prepare the host</h2><p>Build on Linux as a normal user. On Windows, use a Linux VM or WSL2's Linux filesystem, not a Windows-mounted build directory. These commands target Ubuntu 24.04; consult the <a href="https://buildroot.org/downloads/manual/manual.html#requirement-mandatory">official host requirements</a> elsewhere. Allow ample disk, RAM, and network capacity.</p><pre class="kb-code"><code>sudo apt update
+sudo apt install -y build-essential git wget cpio unzip rsync file bc \
+  bzip2 gzip xz-utils patch sed gawk qemu-system-x86</code></pre><p>Use sudo only for host package installation, never for <code>make</code>.</p></div>
+      <div class="kb-section"><h2 id="build">2. Pin and build the image</h2><pre class="kb-code"><code>git clone --branch 2025.02.18 --depth 1 https://gitlab.com/buildroot.org/buildroot.git buildroot
+cd buildroot
+git describe --tags --always
+make qemu_x86_64_defconfig
+make
+ls -lh output/images/
+test -s output/images/bzImage
+test -s output/images/rootfs.ext2</code></pre><p>The initial build fetches sources and creates the toolchain, packages, kernel, and filesystem. Do not assume a top-level <code>make -j</code> is needed. <code>output/build/</code> holds build work, <code>output/host/</code> host tools and the sysroot, and <code>output/images/</code> deployable artifacts. <code>output/target/</code> is not a bootable image.</p></div>
+      <div class="kb-section"><h2 id="boot">3. Boot QEMU and verify</h2><p>Follow the selected defconfig's <a href="https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt">board readme</a>:</p><pre class="kb-code"><code>qemu-system-x86_64 -M pc \
+  -kernel output/images/bzImage \
+  -drive file=output/images/rootfs.ext2,if=virtio,format=raw \
+  -append 'rootwait root=/dev/vda console=tty1 console=ttyS0' \
+  -serial stdio -net nic,model=virtio -net user</code></pre><p>The login prompt appears in QEMU's graphical window. In the guest, inspect:</p><pre class="kb-code"><code>uname -a
+cat /proc/cmdline
+cat /proc/1/comm
+mount | grep ' on / '</code></pre><p>Confirm the kernel, root device, init, and root mount, then shut down with <code>poweroff</code>. Do not hand-edit <code>rootfs.ext2</code> as persistent configuration.</p></div>
+      <div class="kb-section"><h2 id="custom">4. Add a boot-time action</h2><p>This minimal setup uses BusyBox init, not systemd. Run <code>mkdir -p board/demo/overlay/etc/init.d</code> and create <code>board/demo/overlay/etc/init.d/S99demo</code>:</p><pre class="kb-code"><code>#!/bin/sh
+case "$1" in
+  start) echo 'Buildroot demo is ready' &gt;/dev/console ;;
+  stop) ;;
+  *) exit 1 ;;
+esac</code></pre><p>Run <code>chmod +x board/demo/overlay/etc/init.d/S99demo</code> and <code>make menuconfig</code>. Set <strong>System configuration → Root filesystem overlay directories</strong> to <code>board/demo/overlay</code>. Save, run <code>make</code>, and boot again. Look for the message and run <code>test -x /etc/init.d/S99demo</code> in the guest. Production applications should be Buildroot packages; the overlay is a minimal demo.</p></div>
+      <div class="kb-section"><h2 id="hardware">5. Preserve and port</h2><pre class="kb-code"><code>make savedefconfig BR2_DEFCONFIG=board/demo/demo_defconfig
+git status --short</code></pre><p>Commit the defconfig, overlay, patches, and version manifest, not the whole <code>output/</code> directory. A real board needs a matching defconfig and validation of CPU/ABI, bootloader, kernel configuration, device tree, partitions, serial console, and flashing. A QEMU image cannot be flashed directly to an unrelated board. For build failures inspect the package and <code>output/build/</code>; for boot failures inspect kernel arguments, root device, and serial output. Address source and license obligations before shipping.</p></div>
+      <div class="kb-section"><h2>References and next article</h2><p><a href="https://buildroot.org/downloads/manual/manual.html">Buildroot manual</a> · <a href="https://buildroot.org/download.html">LTS releases</a> · <a href="/posts/en/yocto-from-zero/">Next: Yocto from scratch</a> · <a href="/knowledge-base/en/">Knowledge Base</a></p></div>
+    </div>
+  </div></div></div></div><div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <a href="/">yanruihe</a></div><div class="theme-info info-item">Buildroot · Embedded Linux</div></div></footer></div>
+</div></main><script src="/js/i18n.js"></script></body></html>

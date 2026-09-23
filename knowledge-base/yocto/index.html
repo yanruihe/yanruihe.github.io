@@ -21,7 +21,7 @@
     <div class="article-title"><span class="title-hover-animation">Yocto 使用知识库</span></div>
     <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Yocto</span></div><div class="kb-meta">Yocto 6.0.2 / BitBake / Layer / Recipe / Image / devtool</div></div></div>
     <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>以 Yocto Project 6.0.2（Wrynose）为目标版本，把硬件、软件包和发行版配置组织成可复现的系统镜像。</p><p>Poky、BSP 和其他层应使用兼容的 6.0.2 修订。动手实践可跳到<a href="#systemd-demo">systemd 服务 Demo</a>和<a href="#missing-package">排错案例</a>。</p></div>
+      <div class="kb-lead"><p>以 Yocto Project 6.0.2（Wrynose）为目标版本，把硬件、软件包和发行版配置组织成可复现的系统镜像。</p><p>Poky、BSP 和其他层应使用兼容的 6.0.2 修订。首次上手可阅读<a href="/posts/yocto-from-zero/">从零构建完整系统</a>，或直接跳到<a href="#systemd-demo">systemd 服务 Demo</a>和<a href="#missing-package">排错案例</a>。</p></div>
       <div class="kb-section"><h2 id="concepts">1. 核心概念</h2><p>Yocto Project 不是一个固定发行版，而是一套用 OpenEmbedded 构建定制 Linux 系统的工具和元数据。</p><ul><li><strong>BitBake</strong>：解析元数据并执行任务。</li><li><strong>Recipe（配方）</strong>：描述源码、依赖、编译、安装和打包方式。</li><li><strong>Layer（层）</strong>：按功能隔离和组合配方、类、机器与发行版配置。</li><li><strong>Machine</strong>：描述目标硬件平台；<strong>Image</strong> 描述最终系统镜像。</li></ul><pre class="kb-code"><code>Layer → Recipe → Package → Image
   └──── Machine / Distro 配置影响解析与构建结果</code></pre></div>
       <div class="kb-section"><h2 id="quick-start">2. 初始化与第一次构建</h2><p>下面是通用流程，实际使用时必须让 <code>poky</code>、BSP 层和其他层处于相互兼容的 6.0.2 修订：</p><pre class="kb-code"><code>git clone https://git.yoctoproject.org/poky

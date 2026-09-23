@@ -7,4 +7,6 @@
   <id>https://yanruihe.github.io/</id>
   <author><name>yanruihe</name></author>
   <generator uri="https://hexo.io/">Hexo</generator>
+  <entry><title>从零构建嵌入式 Linux：Buildroot</title><link href="https://yanruihe.github.io/posts/buildroot-from-zero/"/><id>https://yanruihe.github.io/posts/buildroot-from-zero/</id><published>2026-09-23T00:00:00Z</published><updated>2026-09-23T00:00:00Z</updated><summary>Buildroot 2025.02.18 LTS：工具链、内核、根文件系统与 QEMU 启动。</summary></entry>
+  <entry><title>从零构建嵌入式 Linux：Yocto</title><link href="https://yanruihe.github.io/posts/yocto-from-zero/"/><id>https://yanruihe.github.io/posts/yocto-from-zero/</id><published>2026-09-23T00:00:00Z</published><updated>2026-09-23T00:00:00Z</updated><summary>Yocto Project 6.0.2：完整镜像、QEMU 与 systemd 服务。</summary></entry>
 </feed>

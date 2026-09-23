@@ -1,5 +1,5 @@
 {
-  "meta": {"title": "Rui's Blog", "subtitle": "", "description": "Git 与 Yocto 使用知识库", "author": "yanruihe", "url": "https://yanruihe.github.io", "root": "/"},
+  "meta": {"title": "Rui's Blog", "subtitle": "", "description": "Git、Buildroot 与 Yocto 嵌入式 Linux 知识库", "author": "yanruihe", "url": "https://yanruihe.github.io", "root": "/"},
   "pages": [
     {"title": "about", "date": "2022-11-07T15:45:04Z", "updated": "2022-11-07T15:45:04.061Z", "comments": true, "path": "about/index.html", "permalink": "https://yanruihe.github.io/about/", "excerpt": "", "text": ""},
     {"title": "知识库", "date": "2026-09-23T00:00:00Z", "updated": "2026-09-23T00:00:00Z", "comments": false, "path": "knowledge-base/index.html", "permalink": "https://yanruihe.github.io/knowledge-base/", "excerpt": "Git 与 Yocto 使用知识库", "text": "Git Yocto 嵌入式 Linux"},
@@ -9,7 +9,10 @@
     {"title": "Git Knowledge Base", "date": "2026-09-23T00:00:00Z", "updated": "2026-09-23T00:00:00Z", "comments": false, "path": "knowledge-base/en/git/index.html", "permalink": "https://yanruihe.github.io/knowledge-base/en/git/", "excerpt": "Git branches, commits, synchronization, and recovery", "text": "Git branch commit rebase revert reflog"},
     {"title": "Yocto Knowledge Base", "date": "2026-09-23T00:00:00Z", "updated": "2026-09-23T00:00:00Z", "comments": false, "path": "knowledge-base/en/yocto/index.html", "permalink": "https://yanruihe.github.io/knowledge-base/en/yocto/", "excerpt": "Yocto Project, BitBake, layers, recipes, and devtool", "text": "Yocto BitBake Layer Recipe Image devtool"}
   ],
-  "posts": [],
+  "posts": [
+    {"title": "从零构建嵌入式 Linux：Buildroot", "date": "2026-09-23T00:00:00Z", "updated": "2026-09-23T00:00:00Z", "path": "posts/buildroot-from-zero/index.html", "permalink": "https://yanruihe.github.io/posts/buildroot-from-zero/", "excerpt": "Buildroot 2025.02.18 LTS 构建、QEMU 启动与验证", "text": "Buildroot 2025.02.18 QEMU Linux kernel root filesystem BusyBox"},
+    {"title": "从零构建嵌入式 Linux：Yocto", "date": "2026-09-23T00:00:00Z", "updated": "2026-09-23T00:00:00Z", "path": "posts/yocto-from-zero/index.html", "permalink": "https://yanruihe.github.io/posts/yocto-from-zero/", "excerpt": "Yocto Project 6.0.2 构建、QEMU 启动与 systemd 服务", "text": "Yocto Project 6.0.2 Wrynose QEMU Layer Recipe Image systemd"}
+  ],
   "categories": [],
   "tags": []
 }

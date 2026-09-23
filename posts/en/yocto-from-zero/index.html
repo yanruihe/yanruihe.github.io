@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Build Embedded Linux from scratch with Yocto Project 6.0.2 and a systemd service"><title>Embedded Linux from scratch: Yocto | Rui&#39;s Blog</title><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/i18n.css"><link rel="stylesheet" href="/css/knowledge-base.css"><link rel="shortcut icon" href="/images/logo.jpg"></head>
+<body><main class="page-container"><div class="page-main-content">
+  <div class="page-main-content-top"><header class="header-wrapper"><div class="header-content"><div class="left"><a class="logo-image" href="/"><img src="/images/logo.jpg" alt="Rui"></a><a class="logo-title" href="/">Rui&#39;s Blog</a></div><div class="right"><div class="pc"><ul class="menu-list"><li class="menu-item"><a href="/">Home</a></li><li class="menu-item"><a href="/archives">Archives</a></li><li class="menu-item"><a href="/knowledge-base/en/">Knowledge Base</a></li><li class="menu-item"><a href="/about">About</a></li></ul></div></div></div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
+  <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
+    <div class="article-title"><span class="title-hover-animation">Embedded Linux from scratch: Yocto</span></div><div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Yocto</span></div><div class="kb-meta">2026-09-23 · Yocto Project 6.0.2 · QEMU x86_64</div></div></div>
+    <div class="article-content keep-markdown-body">
+      <div class="kb-lead"><p>Build and boot a complete <code>qemux86-64</code> image from Yocto Project 6.0.2, then add a systemd service. QEMU validates kernel, filesystem, init, and application; real hardware also needs BSP, bootloader, device tree, and peripheral work.</p><p><a href="#host">Host</a> · <a href="#sources">Sources</a> · <a href="#base-image">Base image</a> · <a href="#service">Service</a> · <a href="#hardware">Hardware</a></p></div>
+      <div class="kb-section"><h2 id="host">1. Host prerequisites</h2><p>Use an <a href="https://docs.yoctoproject.org/6.0.2/ref-manual/system-requirements.html">officially supported Linux host</a>. The 6.0.2 <code>core-image-sato</code> reference lists about 140 GB free disk and 32 GB RAM; our minimal image is usually lighter but still needs ample resources. WSL2 can work but is not validated as an official build host. For Ubuntu 24.04:</p><pre class="kb-code"><code>sudo apt update
+sudo apt install -y build-essential chrpath cpio debianutils diffstat file \
+  gawk gcc git iputils-ping libacl1 libcrypt-dev locales python3 \
+  python3-git python3-jinja2 python3-pexpect python3-pip \
+  python3-subunit socat texinfo unzip wget xz-utils zstd
+locale -a | grep -i en_US.utf8</code></pre><p>Enable <code>en_US.UTF-8</code> if the check fails. Build as a normal user, not with <code>sudo bitbake</code>.</p></div>
+      <div class="kb-section"><h2 id="sources">2. Pin the 6.0.2 layers</h2><p>Follow the <a href="https://docs.yoctoproject.org/6.0.2/dev-manual/poky-manual-setup.html">official manual setup</a> and pin all three repositories to the same release:</p><pre class="kb-code"><code>mkdir -p embedded-yocto/layers
+cd embedded-yocto
+git clone -b yocto-6.0.2 https://git.openembedded.org/bitbake layers/bitbake
+git clone -b yocto-6.0.2 https://git.openembedded.org/openembedded-core layers/openembedded-core
+git clone -b yocto-6.0.2 https://git.yoctoproject.org/meta-yocto layers/meta-yocto
+source layers/openembedded-core/oe-init-build-env
+bitbake-getvar MACHINE
+bitbake-getvar DISTRO
+bitbake-getvar INIT_MANAGER
+bitbake-layers show-layers</code></pre><p>The script enters <code>build/</code>. Confirm <code>MACHINE=qemux86-64</code>. In 6.0.2, <code>nodistro</code> defaults to systemd but <strong>Poky still defaults to SysVinit</strong>. If <code>INIT_MANAGER</code> is not <code>systemd</code>, add <code>INIT_MANAGER = "systemd"</code> to the demo's <code>build/conf/local.conf</code> before building the service image. Production uses a custom distro configuration.</p></div>
+      <div class="kb-section"><h2 id="base-image">3. Build and boot the minimal image</h2><pre class="kb-code"><code>bitbake core-image-minimal
+ls -lh tmp/deploy/images/qemux86-64/
+runqemu qemux86-64 core-image-minimal ext4 nographic</code></pre><p>If ext4 was not generated, inspect <code>bitbake-getvar IMAGE_FSTYPES</code> and choose the actual type. The first build fetches and compiles many dependencies. Do not commit <code>tmp/</code>, <code>downloads/</code>, or <code>sstate-cache/</code>. In the guest:</p><pre class="kb-code"><code>uname -a
+cat /proc/cmdline
+cat /proc/1/comm
+mount | grep ' on / '</code></pre><p>Login policy depends on image configuration. Only on an isolated QEMU demo image, <code>EXTRA_IMAGE_FEATURES = "empty-root-password"</code> can allow an empty-password local console login. Never use it for networked or production images; do not enable empty-password SSH. Shut down with <code>poweroff</code>.</p></div>
+      <div class="kb-section"><h2 id="service">4. Add and start a systemd service</h2><p>The repository's <a href="https://github.com/yanruihe/yanruihe.github.io/tree/main/knowledge-base/examples/meta-demo">meta-demo layer</a> contains a script, unit, recipe, and <code>demo-image</code>. From <code>embedded-yocto/build/</code>, check <code>pwd</code> then return to the source root:</p><pre class="kb-code"><code>cd ..
+git clone --depth 1 https://github.com/yanruihe/yanruihe.github.io.git site
+cp -a site/knowledge-base/examples/meta-demo layers/meta-demo
+source layers/openembedded-core/oe-init-build-env
+bitbake-layers add-layer ../layers/meta-demo
+bitbake-layers show-recipes hello-yocto
+bitbake demo-image
+runqemu qemux86-64 demo-image ext4 nographic</code></pre><p>In the guest:</p><pre class="kb-code"><code>cat /proc/1/comm
+systemctl is-enabled hello-yocto.service
+systemctl is-active hello-yocto.service
+cat /run/hello-yocto/status
+journalctl -u hello-yocto.service -b --no-pager</code></pre><p>Expect <code>enabled</code> and <code>active</code>. Otherwise inspect init, package inclusion, unit installation, and logs. The example includes Dropbear for isolated development; remove unnecessary SSH and use a proper account/key policy before deployment. Its <code>LICENSE = "CLOSED"</code> is a demo placeholder.</p></div>
+      <div class="kb-section"><h2 id="hardware">5. Move to real hardware</h2><p>Record repository commits, <code>MACHINE</code>, <code>DISTRO</code>, <code>INIT_MANAGER</code>, layer revisions, and images. Choose a 6.0.2-compatible BSP and validate bootloader, kernel configuration, device tree, partitions, serial console, networking, flashing, and rollback. Commit layers, recipes, and config, not edits to <code>tmp/work/</code> or built images. For build errors inspect <code>temp/log.do_*</code>; for runtime errors inspect serial output, <code>systemctl status</code>, and <code>journalctl</code>.</p></div>
+      <div class="kb-section"><h2>References and related reading</h2><p><a href="https://docs.yoctoproject.org/6.0.2/dev-manual/poky-manual-setup.html">Yocto 6.0.2 manual setup</a> · <a href="https://docs.yoctoproject.org/6.0/migration-guides/migration-6.0.html">6.0 init changes</a> · <a href="/posts/en/buildroot-from-zero/">Previous: Buildroot from scratch</a> · <a href="/knowledge-base/en/yocto/">Yocto Knowledge Base</a></p></div>
+    </div>
+  </div></div></div></div><div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <a href="/">yanruihe</a></div><div class="theme-info info-item">Yocto · Embedded Linux</div></div></footer></div>
+</div></main><script src="/js/i18n.js"></script></body></html>

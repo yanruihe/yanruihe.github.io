@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="从零使用 Yocto Project 6.0.2 构建嵌入式 Linux 与 systemd 服务"><title>从零构建嵌入式 Linux：Yocto | Rui&#39;s Blog</title><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/i18n.css"><link rel="stylesheet" href="/css/knowledge-base.css"><link rel="shortcut icon" href="/images/logo.jpg"></head>
+<body><main class="page-container"><div class="page-main-content">
+  <div class="page-main-content-top"><header class="header-wrapper"><div class="header-content"><div class="left"><a class="logo-image" href="/"><img src="/images/logo.jpg" alt="Rui"></a><a class="logo-title" href="/">Rui&#39;s Blog</a></div><div class="right"><div class="pc"><ul class="menu-list"><li class="menu-item"><a href="/">首页</a></li><li class="menu-item"><a href="/archives">归档</a></li><li class="menu-item"><a href="/knowledge-base/">知识库</a></li><li class="menu-item"><a href="/about">关于</a></li></ul></div></div></div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">首页</a></li><li class="drawer-menu-item flex-center"><a href="/archives">归档</a></li><li class="drawer-menu-item flex-center"><a href="/knowledge-base/">知识库</a></li><li class="drawer-menu-item flex-center"><a href="/about">关于</a></li></ul></div><div class="window-mask"></div></header></div>
+  <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
+    <div class="article-title"><span class="title-hover-animation">从零构建嵌入式 Linux：Yocto</span></div><div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Yocto</span></div><div class="kb-meta">2026-09-23 · Yocto Project 6.0.2 · QEMU x86_64</div></div></div>
+    <div class="article-content keep-markdown-body">
+      <div class="kb-lead"><p>从 6.0.2 源码构建、启动完整的 <code>qemux86-64</code> 镜像，再把 systemd 服务纳入镜像。QEMU 验证内核、根文件系统、init 与应用流程；真实开发板仍需 BSP、Bootloader、设备树和外设适配。</p><p><a href="#host">主机准备</a> · <a href="#sources">获取源码</a> · <a href="#base-image">最小镜像</a> · <a href="#service">服务镜像</a> · <a href="#hardware">板级迁移</a></p></div>
+      <div class="kb-section"><h2 id="host">1. 主机准备与资源</h2><p>选择<a href="https://docs.yoctoproject.org/6.0.2/ref-manual/system-requirements.html">官方支持的 Linux 主机</a>。6.0.2 的 <code>core-image-sato</code> 参考配置约需 140 GB 空闲磁盘和 32 GB 内存；本篇最小镜像通常更轻，但仍需充足空间。WSL2 可用但未经官方构建主机验证。Ubuntu 24.04 安装：</p><pre class="kb-code"><code>sudo apt update
+sudo apt install -y build-essential chrpath cpio debianutils diffstat file \
+  gawk gcc git iputils-ping libacl1 libcrypt-dev locales python3 \
+  python3-git python3-jinja2 python3-pexpect python3-pip \
+  python3-subunit socat texinfo unzip wget xz-utils zstd
+locale -a | grep -i en_US.utf8</code></pre><p>若最后一行无结果，先按官方要求启用 <code>en_US.UTF-8</code>。以普通用户构建，不使用 <code>sudo bitbake</code>。</p></div>
+      <div class="kb-section"><h2 id="sources">2. 固定 6.0.2 元数据</h2><p>按<a href="https://docs.yoctoproject.org/6.0.2/dev-manual/poky-manual-setup.html">官方手动配置</a>把三个仓库固定到同一发行版：</p><pre class="kb-code"><code>mkdir -p embedded-yocto/layers
+cd embedded-yocto
+git clone -b yocto-6.0.2 https://git.openembedded.org/bitbake layers/bitbake
+git clone -b yocto-6.0.2 https://git.openembedded.org/openembedded-core layers/openembedded-core
+git clone -b yocto-6.0.2 https://git.yoctoproject.org/meta-yocto layers/meta-yocto
+source layers/openembedded-core/oe-init-build-env
+bitbake-getvar MACHINE
+bitbake-getvar DISTRO
+bitbake-getvar INIT_MANAGER
+bitbake-layers show-layers</code></pre><p>脚本会进入 <code>build/</code>。确认 <code>MACHINE=qemux86-64</code>。6.0.2 的 <code>nodistro</code> 默认 systemd，<strong>Poky 默认仍是 SysVinit</strong>；后面要运行 systemd 服务。若当前 <code>INIT_MANAGER</code> 不是 <code>systemd</code>，在演练的 <code>build/conf/local.conf</code> 中加入 <code>INIT_MANAGER = "systemd"</code> 后再构建。正式项目应写在自己的 distro 配置中。</p></div>
+      <div class="kb-section"><h2 id="base-image">3. 构建和启动最小镜像</h2><pre class="kb-code"><code>bitbake core-image-minimal
+ls -lh tmp/deploy/images/qemux86-64/
+runqemu qemux86-64 core-image-minimal ext4 nographic</code></pre><p>若未生成 ext4，先查 <code>bitbake-getvar IMAGE_FSTYPES</code> 并选实际类型。首次编译会下载许多依赖；不要提交 <code>tmp/</code>、<code>downloads/</code> 或 <code>sstate-cache/</code>。客户机内验证：</p><pre class="kb-code"><code>uname -a
+cat /proc/cmdline
+cat /proc/1/comm
+mount | grep ' on / '</code></pre><p>登录策略依镜像配置而定。仅限隔离的 QEMU 演练镜像，可用 <code>EXTRA_IMAGE_FEATURES = "empty-root-password"</code> 允许本地控制台空密码登录；绝不可用于联网或生产镜像，也不要启用 SSH 空密码登录。客户机运行 <code>poweroff</code> 后再继续。</p></div>
+      <div class="kb-section"><h2 id="service">4. 加入并启动 systemd 服务</h2><p>仓库的<a href="https://github.com/yanruihe/yanruihe.github.io/tree/main/knowledge-base/examples/meta-demo">meta-demo 示例层</a>包含脚本、unit、Recipe 和 <code>demo-image</code>。从 <code>embedded-yocto/build/</code> 回到源码根目录；先用 <code>pwd</code> 核对：</p><pre class="kb-code"><code>cd ..
+git clone --depth 1 https://github.com/yanruihe/yanruihe.github.io.git site
+cp -a site/knowledge-base/examples/meta-demo layers/meta-demo
+source layers/openembedded-core/oe-init-build-env
+bitbake-layers add-layer ../layers/meta-demo
+bitbake-layers show-recipes hello-yocto
+bitbake demo-image
+runqemu qemux86-64 demo-image ext4 nographic</code></pre><p>进入客户机：</p><pre class="kb-code"><code>cat /proc/1/comm
+systemctl is-enabled hello-yocto.service
+systemctl is-active hello-yocto.service
+cat /run/hello-yocto/status
+journalctl -u hello-yocto.service -b --no-pager</code></pre><p>应看到 <code>enabled</code> 与 <code>active</code>；否则检查 init、包是否入镜像、unit 路径和日志。示例镜像带 Dropbear，仅适用于隔离开发；部署前关闭不需要的 SSH 并设置合理的账户与密钥。示例 Recipe 的 <code>LICENSE = "CLOSED"</code> 只是演示占位。</p></div>
+      <div class="kb-section"><h2 id="hardware">5. 迁移真实开发板</h2><p>记录仓库 commit、<code>MACHINE</code>、<code>DISTRO</code>、<code>INIT_MANAGER</code>、各层修订与镜像产物。选择兼容 6.0.2 的 BSP，逐项验证 Bootloader、内核配置、设备树、分区、串口、网络、刷机和回滚。功能修改应提交 layer、recipe、config，而非直接编辑 <code>tmp/work/</code> 或镜像。构建失败看 <code>temp/log.do_*</code>，运行失败看串口、<code>systemctl status</code> 和 <code>journalctl</code>。</p></div>
+      <div class="kb-section"><h2>参考与相关阅读</h2><p><a href="https://docs.yoctoproject.org/6.0.2/dev-manual/poky-manual-setup.html">Yocto 6.0.2 手动配置</a> · <a href="https://docs.yoctoproject.org/6.0/migration-guides/migration-6.0.html">6.0 初始化系统变化</a> · <a href="/posts/buildroot-from-zero/">上一篇：Buildroot 从零构建</a> · <a href="/knowledge-base/yocto/">Yocto 知识库</a></p></div>
+    </div>
+  </div></div></div></div>
+  <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <a href="/">yanruihe</a></div><div class="theme-info info-item">Yocto · 嵌入式 Linux</div></div></footer></div>
+</div></main><script src="/js/i18n.js"></script></body></html>

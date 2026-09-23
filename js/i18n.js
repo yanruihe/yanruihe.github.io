@@ -4,6 +4,12 @@
   var translations = {
     'Yocto 使用知识库': 'Yocto Knowledge Base',
     'Git 知识库': 'Git Knowledge Base',
+    '从零构建嵌入式 Linux：Buildroot': 'Embedded Linux from scratch: Buildroot',
+    '从零构建嵌入式 Linux：Yocto': 'Embedded Linux from scratch: Yocto',
+    '最新博文': 'Latest articles',
+    '2 篇文章': '2 articles',
+    '用 Buildroot 生成工具链、内核与根文件系统，并在 QEMU 中启动。': 'Build a toolchain, kernel, and root filesystem with Buildroot and boot them in QEMU.',
+    '用 Yocto 6.0.2 构建镜像，并把 systemd 服务加入系统。': 'Build a Yocto 6.0.2 image and include a systemd service.',
     '知识库总览': 'Knowledge Base Overview',
     '黄色的森林分出两条路': 'Two roads diverged in a yellow wood',
     '我选择人迹更少的那一条，从此决定我一生的道路。': 'I took the one less traveled by, and that has made all the difference.',
@@ -45,11 +51,15 @@
     '/knowledge-base/': '/knowledge-base/en/',
     '/knowledge-base/git/': '/knowledge-base/en/git/',
     '/knowledge-base/yocto/': '/knowledge-base/en/yocto/',
+    '/posts/buildroot-from-zero/': '/posts/en/buildroot-from-zero/',
+    '/posts/yocto-from-zero/': '/posts/en/yocto-from-zero/',
   };
   var chinesePages = {
     '/knowledge-base/en/': '/knowledge-base/',
     '/knowledge-base/en/git/': '/knowledge-base/git/',
     '/knowledge-base/en/yocto/': '/knowledge-base/yocto/',
+    '/posts/en/buildroot-from-zero/': '/posts/buildroot-from-zero/',
+    '/posts/en/yocto-from-zero/': '/posts/yocto-from-zero/',
   };
 
   function getStoredLanguage() {
@@ -80,6 +90,7 @@
     var path = window.location.pathname.replace(/index\.html$/, '');
     if (englishPages[path]) return 'zh';
     if (path.indexOf('/knowledge-base/en/') === 0) return 'en';
+    if (path.indexOf('/posts/en/') === 0) return 'en';
     return getStoredLanguage() === 'en' ? 'en' : 'zh';
   }
 

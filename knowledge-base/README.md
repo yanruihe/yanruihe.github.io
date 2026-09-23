@@ -9,6 +9,8 @@
 | Git | 如何保存变更、协作、回滚和发布 | [Git 知识库](git/) |
 | Yocto | 如何组织层、配方、镜像和调试流程 | [Yocto 使用知识库](yocto/) |
 
+从零构建系列：[Buildroot 2025.02.18](../posts/buildroot-from-zero/) · [Yocto 6.0.2](../posts/yocto-from-zero/)。
+
 ## 推荐记录格式
 
 1. **背景**：目标、平台、版本和已知约束。
