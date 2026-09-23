@@ -1,0 +1,18 @@
+.language-switcher button {
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.language-switcher button:hover {
+  color: var(--primary-color);
+}
+.language-switcher button:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 3px;
+}
+.language-en .kb-meta {
+  letter-spacing: 0.01em;
+}

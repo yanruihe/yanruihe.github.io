@@ -16,6 +16,21 @@
     <content><![CDATA[Yocto Project、BitBake、Layer、Recipe、Machine、Image、devtool、构建调试、可复现发布。]]></content>
   </entry>
   <entry>
+    <title>Knowledge Base</title>
+    <url>/knowledge-base/en/</url>
+    <content><![CDATA[Git and Yocto knowledge base. Capture context, reduce to a minimal reproduction, verify, commit, and publish.]]></content>
+  </entry>
+  <entry>
+    <title>Git Knowledge Base</title>
+    <url>/knowledge-base/en/git/</url>
+    <content><![CDATA[Git working tree, staging area, local and remote repositories; branches, commits, rebase, revert, reflog, and Yocto collaboration.]]></content>
+  </entry>
+  <entry>
+    <title>Yocto Knowledge Base</title>
+    <url>/knowledge-base/en/yocto/</url>
+    <content><![CDATA[Yocto Project, BitBake, layers, recipes, machines, images, devtool, build debugging, reproducibility, and release.]]></content>
+  </entry>
+  <entry>
     <title>Hello World</title>
     <url>/2022/11/07/hello-world/</url>
     <content><![CDATA[Welcome to Hexo! Quick Start.]]></content>

@@ -8,6 +8,7 @@
 - [Git 知识库](knowledge-base/git.md)
 - [Yocto 使用知识库](knowledge-base/yocto.md)
 - [线上知识库入口](knowledge-base/)
+- [English Knowledge Base](knowledge-base/en/)
 
 知识记录统一采用“背景 / 操作 / 验证 / 风险 / 参考资料”的结构。涉及命令、版本或硬件差异时，先在目标环境验证，再提交到仓库。
 

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="description" content="Git and Yocto knowledge base">
+    <meta name="author" content="yanruihe">
+    <title>Knowledge Base | Rui&#39;s Blog</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/knowledge-base.css">
+    <link rel="stylesheet" href="/css/i18n.css">
+    <link rel="shortcut icon" href="/images/logo.jpg">
+</head>
+<body>
+<main class="page-container"><div class="page-main-content">
+  <div class="page-main-content-top"><header class="header-wrapper"><div class="header-content">
+    <div class="left"><a class="logo-image" href="/"><img src="/images/logo.jpg" alt="Rui"></a><a class="logo-title" href="/">Rui&#39;s Blog</a></div>
+    <div class="right"><div class="pc"><ul class="menu-list"><li class="menu-item"><a href="/">Home</a></li><li class="menu-item"><a href="/archives">Archives</a></li><li class="menu-item"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="menu-item"><a href="/about">About</a></li></ul></div><div class="mobile"><div class="icon-item menu-bar"><div class="menu-bar-middle"></div></div></div></div>
+  </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
+  <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
+    <div class="article-title"><span class="title-hover-animation">Knowledge Base</span></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">Updated 2026-09-23 · Git / Yocto / Embedded Linux</div></div></div>
+    <div class="article-content keep-markdown-body">
+      <div class="kb-lead"><p>Turn scattered engineering experience into knowledge that is searchable, reusable, and verifiable.</p><p>This hub connects Git collaboration with Yocto builds: use Git to manage change and Yocto to verify system artifacts.</p></div>
+      <div class="kb-card-grid"><a class="kb-card" href="/knowledge-base/en/git/"><h3>Git Knowledge Base</h3><p>Worktrees, branches, commits, synchronization, recovery, and collaboration conventions for Yocto projects.</p></a><a class="kb-card" href="/knowledge-base/en/yocto/"><h3>Yocto Knowledge Base</h3><p>BitBake, layers, recipes, images, devtool, and common build-debugging paths.</p></a></div>
+      <div class="kb-section"><h2 id="overview">How the topics fit together</h2><table class="kb-table"><thead><tr><th>Topic</th><th>What to record</th><th>When to use it</th></tr></thead><tbody><tr><td>Git</td><td>Change boundaries, history, collaboration, and recovery</td><td>Before editing, review, or rollback</td></tr><tr><td>Yocto</td><td>Layers, recipes, machines, images, and build logs</td><td>When adding software or adapting hardware</td></tr><tr><td>Project knowledge</td><td>Platform versions, verification, constraints, and artifacts</td><td>For handoff, reproduction, and release</td></tr></tbody></table></div>
+      <div class="kb-section"><h2 id="workflow">Recommended loop</h2><ol><li>Record the context: target board, branch, machine configuration, image, and reproduction conditions.</li><li>Reduce it to a minimal reproduction with the necessary commands, configuration, and logs.</li><li>Verify and preserve the fix in a layer, recipe, or document, then commit it to Git.</li><li>Publish the knowledge with verification results, risks, and official references.</li></ol><pre class="kb-code"><code>Capture → Minimal reproduction → Verification → Git commit → Site publication</code></pre></div>
+      <div class="kb-section"><h2 id="convention">Record format</h2><ul><li><strong>Context</strong>: goal, platform, version, and constraints.</li><li><strong>Operation</strong>: commands or configuration that can be reused.</li><li><strong>Verification</strong>: logs, tests, or inspectable artifacts.</li><li><strong>Risk</strong>: version differences, destructive actions, and rollback.</li><li><strong>References</strong>: official documentation, commits, and related issues.</li></ul></div>
+      <div class="kb-section"><h2>Source and references</h2><p>The Markdown source is kept in the repository so future changes can be reviewed and extended through Git.</p><div class="kb-links"><a href="/knowledge-base/en/git/">Git page</a><a href="/knowledge-base/en/yocto/">Yocto page</a><a href="https://git-scm.com/docs" target="_blank" rel="noopener">Git documentation</a><a href="https://docs.yoctoproject.org/" target="_blank" rel="noopener">Yocto documentation</a></div></div>
+    </div>
+  </div></div></div></div>
+  <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Powered by Hexo | Knowledge Base</div></div></footer></div>
+</div></main>
+<script src="/js/i18n.js"></script>
+</body>
+</html>

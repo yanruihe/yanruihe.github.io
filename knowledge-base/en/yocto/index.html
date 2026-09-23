@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="description" content="Yocto Project, BitBake, layers, recipes, and devtool knowledge base">
+    <meta name="author" content="yanruihe">
+    <title>Yocto Knowledge Base | Rui&#39;s Blog</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/knowledge-base.css">
+    <link rel="stylesheet" href="/css/i18n.css">
+    <link rel="shortcut icon" href="/images/logo.jpg">
+</head>
+<body>
+<main class="page-container"><div class="page-main-content">
+  <div class="page-main-content-top"><header class="header-wrapper"><div class="header-content">
+    <div class="left"><a class="logo-image" href="/"><img src="/images/logo.jpg" alt="Rui"></a><a class="logo-title" href="/">Rui&#39;s Blog</a></div>
+    <div class="right"><div class="pc"><ul class="menu-list"><li class="menu-item"><a href="/">Home</a></li><li class="menu-item"><a href="/archives">Archives</a></li><li class="menu-item"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="menu-item"><a href="/about">About</a></li></ul></div><div class="mobile"><div class="icon-item menu-bar"><div class="menu-bar-middle"></div></div></div></div>
+  </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
+  <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
+    <div class="article-title"><span class="title-hover-animation">Yocto Knowledge Base</span></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Yocto</span></div><div class="kb-meta">BitBake / Layers / Recipes / Images / devtool</div></div></div>
+    <div class="article-content keep-markdown-body">
+      <div class="kb-lead"><p>Organize hardware, software packages, and distribution configuration into reproducible system images.</p><p>The commands are generic examples. Always confirm that the layers and Yocto release branches are compatible before building.</p></div>
+      <div class="kb-section"><h2 id="concepts">1. Core concepts</h2><p>Yocto Project is not a fixed distribution. It is a set of tools and metadata for building customized Linux systems with OpenEmbedded.</p><ul><li><strong>BitBake</strong>: parses metadata and executes tasks.</li><li><strong>Recipe</strong>: describes source, dependencies, compilation, installation, and packaging.</li><li><strong>Layer</strong>: isolates and composes recipes, classes, machine, and distribution configuration.</li><li><strong>Machine</strong>: describes the target hardware; an <strong>Image</strong> describes the final system image.</li></ul><pre class="kb-code"><code>Layer → Recipe → Package → Image
+  └──── Machine / Distro configuration affects parsing and build results</code></pre></div>
+      <div class="kb-section"><h2 id="quick-start">2. Initialize and build</h2><p>This is a generic flow. The <code>poky</code>, BSP, and other layers must be on compatible release branches:</p><pre class="kb-code"><code>git clone https://git.yoctoproject.org/poky
+cd poky
+git checkout &lt;compatible-release-branch&gt;
+source oe-init-build-env build
+
+bitbake-layers show-layers
+bitbake core-image-minimal</code></pre><p>Confirm <code>MACHINE</code>, <code>DISTRO</code>, download directories, and shared-state cache settings. Reuse <code>DL_DIR</code> and <code>SSTATE_DIR</code> where possible.</p></div>
+      <div class="kb-section"><h2 id="layers">3. Create and add a custom layer</h2><pre class="kb-code"><code>bitbake-layers create-layer ../meta-myproduct
+bitbake-layers add-layer ../meta-myproduct
+bitbake-layers show-layers</code></pre><p>Keep product customizations in a separate layer instead of modifying <code>poky</code> or <code>meta-openembedded</code> directly. A common layout is:</p><pre class="kb-code"><code>meta-myproduct/
+├── conf/layer.conf
+├── recipes-apps/demo/demo_1.0.bb
+├── recipes-core/images/myproduct-image.bb
+└── recipes-kernel/linux/linux-%.bbappend</code></pre></div>
+      <div class="kb-section"><h2 id="recipe">4. Recipes and images</h2><p>A recipe should make its source, license, dependencies, and build tasks clear. Prefer a <code>.bbappend</code> to customize existing software instead of copying the entire upstream recipe:</p><pre class="kb-code"><code>IMAGE_INSTALL:append = " demo"</code></pre><p>Override syntax depends on the release. Check syntax, layer compatibility, and dependencies when moving to a new branch.</p></div>
+      <div class="kb-section"><h2 id="devtool">5. The devtool loop</h2><p>Use <code>devtool</code> to shorten the edit-build-deploy-finish loop:</p><pre class="kb-code"><code>devtool add https://example.com/project.git
+devtool modify &lt;recipe&gt;
+devtool build &lt;recipe&gt;
+devtool deploy-target &lt;recipe&gt; root@&lt;target-ip&gt;
+
+# Commit the source first, then finish it into the permanent layer
+devtool finish &lt;recipe&gt; ../meta-myproduct
+devtool reset &lt;recipe&gt;</code></pre><p>Confirm SSH, target architecture, and runtime dependencies before deployment. Make sure the source repository is committed before <code>devtool finish</code>.</p></div>
+      <div class="kb-section"><h2 id="debug">6. Debug checklist</h2><pre class="kb-code"><code># Inspect final variable values and their origins
+bitbake -e &lt;recipe&gt; | less
+
+# Inspect task dependencies or run one task
+bitbake -g &lt;recipe&gt;
+bitbake &lt;recipe&gt; -c compile
+
+# Open a development shell
+bitbake &lt;recipe&gt; -c devshell
+
+# Clean a recipe and rebuild it
+bitbake &lt;recipe&gt; -c cleansstate
+
+# Find which package owns a file
+oe-pkgdata-util find-path /usr/bin/&lt;program&gt;</code></pre><p>For a missing recipe, check layers and the recipe name. For configuration that is not taking effect, inspect its origin with <code>bitbake -e</code>. For incremental build problems, clean only the affected task or recipe first.</p></div>
+      <div class="kb-section"><h2 id="release">7. Reproducibility and release</h2><ul><li>Pin a manifest, layer branch, or commit instead of recording only a vague version.</li><li>Record <code>MACHINE</code>, image target, build time, build host, and important configuration.</li><li>Put custom layers, recipes, patches, and <code>conf</code> configuration in Git; do not commit <code>tmp/</code>, <code>downloads/</code>, or <code>sstate-cache/</code>.</li><li>Run a clean build or CI verification before release and preserve the image checksum.</li></ul></div>
+      <div class="kb-section"><h2>References</h2><p><a href="https://docs.yoctoproject.org/overview-manual/concepts.html" target="_blank" rel="noopener">Yocto Project concepts</a> · <a href="https://docs.yoctoproject.org/dev/dev-manual/layers.html" target="_blank" rel="noopener">Creating layers</a> · <a href="https://docs.yoctoproject.org/dev-manual/new-recipe.html" target="_blank" rel="noopener">Writing a recipe</a> · <a href="https://docs.yoctoproject.org/dev-manual/devtool.html" target="_blank" rel="noopener">devtool</a> · <a href="https://docs.yoctoproject.org/bitbake/dev/singleindex.html" target="_blank" rel="noopener">BitBake documentation</a></p><p><a href="/knowledge-base/en/">Back to Knowledge Base</a> · <a href="/knowledge-base/en/git/">Previous: Git Knowledge Base</a></p></div>
+    </div>
+  </div></div></div></div>
+  <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Yocto Knowledge Base</div></div></footer></div>
+</div></main>
+<script src="/js/i18n.js"></script>
+</body>
+</html>
