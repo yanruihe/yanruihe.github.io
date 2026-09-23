@@ -113,4 +113,71 @@ oe-pkgdata-util find-path /usr/bin/<program>
 - 将自定义层、配方、补丁和 `conf` 配置放入 Git；不要提交 `tmp/`、`downloads/`、`sstate-cache/` 等大型生成目录。
 - 发布前至少完成一次干净环境构建或在 CI 中验证，并保存镜像校验值。
 
+## 8. 实际案例：把 systemd 服务加入镜像
+
+本案例整理自本地 `F:\MyBrain\yocto\examples\meta-demo` 和 `08-systemd服务案例.md`，包含真正的 Layer、Recipe、脚本、unit 和 Image Recipe，而不只是单条 `IMAGE_INSTALL` 配置。示例目录：
+
+网站仓库中已提供 [可下载的 meta-demo 示例层](examples/meta-demo/README.md)；完整文件可从该目录复制，不必依赖本地 `F:` 盘。
+
+```text
+meta-demo/
+├── conf/layer.conf
+├── recipes-demo/hello-yocto/hello-yocto_1.0.bb
+├── recipes-demo/hello-yocto/files/hello-yocto.sh
+├── recipes-demo/hello-yocto/files/hello-yocto.service
+└── recipes-core/images/demo-image.bb
+```
+
+`hello-yocto_1.0.bb` 安装脚本和 unit，并声明自动启用服务；`demo-image.bb` 通过 `IMAGE_INSTALL:append = " hello-yocto"` 将包加入镜像。脚本每 10 秒更新 `/run/hello-yocto/status`。复制本地示例层到 Yocto 工作区后，在 Linux/WSL2 的构建环境中执行：
+
+Recipe 的关键配置来自本地示例；`UNPACKDIR` 的用法应与所选 Yocto 分支保持一致：
+
+```bitbake
+SRC_URI = "file://hello-yocto.sh file://hello-yocto.service"
+S = "${UNPACKDIR}"
+inherit allarch systemd
+
+do_install() {
+    install -d ${D}${bindir} ${D}${systemd_system_unitdir}
+    install -m 0755 ${UNPACKDIR}/hello-yocto.sh ${D}${bindir}/hello-yocto.sh
+    install -m 0644 ${UNPACKDIR}/hello-yocto.service ${D}${systemd_system_unitdir}/hello-yocto.service
+}
+SYSTEMD_SERVICE:${PN} = "hello-yocto.service"
+SYSTEMD_AUTO_ENABLE = "enable"
+```
+
+完整文件还应包含 `SUMMARY`、`LICENSE` 等元数据；正式项目使用真实许可证信息。执行构建：
+
+```bash
+source poky/oe-init-build-env build-demo
+bitbake-layers add-layer /path/to/meta-demo
+# 在 conf/local.conf 中设置 INIT_MANAGER = "systemd"
+bitbake-layers show-recipes hello-yocto
+bitbake demo-image
+```
+
+这里 `/path/to/meta-demo` 必须换成真实路径；`INIT_MANAGER` 是配置文件内容，不是 shell 命令。构建成功后按机器和镜像格式选择 `runqemu` 参数，在目标系统内验证：
+
+```bash
+systemctl is-enabled hello-yocto.service
+systemctl status hello-yocto.service
+cat /run/hello-yocto/status
+journalctl -u hello-yocto.service -b --no-pager
+```
+
+正式项目还应核对非 root 运行要求和目标 BSP 的 init 配置；示例中的 `LICENSE = "CLOSED"` 仅供本地演示。
+
+## 9. 排错案例：包已构建，但镜像中没有服务
+
+根据本地 `09-调试排错与构建加速.md`，按“层 → 配方 → 包 → 镜像 → 运行时”逐层排查：
+
+```bash
+bitbake-layers show-layers
+bitbake-layers show-recipes hello-yocto
+bitbake -e demo-image | grep '^IMAGE_INSTALL='
+oe-pkgdata-util find-pkg hello-yocto
+```
+
+若 Recipe 存在但 `IMAGE_INSTALL` 不含 `hello-yocto`，检查 Image Recipe 和包名；若镜像里已有包但服务不启动，检查 `INIT_MANAGER`、unit 安装路径、`SYSTEMD_SERVICE:${PN}`、`systemctl status` 与 `journalctl`。不要一开始就删除整个 `tmp/` 或共享缓存。
+
 参考：[Yocto Project 概览](https://docs.yoctoproject.org/overview-manual/concepts.html)、[创建层](https://docs.yoctoproject.org/dev/dev-manual/layers.html)、[编写新配方](https://docs.yoctoproject.org/dev-manual/new-recipe.html)、[devtool](https://docs.yoctoproject.org/dev-manual/devtool.html)、[BitBake 文档](https://docs.yoctoproject.org/bitbake/dev/singleindex.html)。

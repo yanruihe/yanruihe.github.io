@@ -21,7 +21,7 @@
     <div class="article-title"><span class="title-hover-animation">Git Knowledge Base</span></div>
     <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Git</span></div><div class="kb-meta">Reusable workflows for branches, commits, synchronization, and recovery</div></div></div>
     <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>Confirm the state before changing it; make the change recoverable before cleaning anything up.</p><p>This page covers Git workflows, branch management, commit reviews, and version recovery.</p></div>
+      <div class="kb-lead"><p>Confirm the state before changing it; make the change recoverable before cleaning anything up.</p><p>This page covers Git workflows, branch management, commit reviews, and version recovery. For hands-on practice, jump to the <a href="#team-demo">two-person demo</a> or <a href="#incidents">incident examples</a>.</p></div>
       <div class="kb-section"><h2 id="model">1. How Git saves and uploads changes</h2><p>Suppose you edit <code>README.md</code>. The file is not automatically uploaded to GitHub. It moves through four steps:</p><ol><li><strong>Working tree</strong>: you edit the file on your computer; the change is not yet a Git commit.</li><li><strong>Staging area</strong>: <code>git add README.md</code> selects the content for the next commit.</li><li><strong>Local repository</strong>: <code>git commit -m &quot;docs: update README&quot;</code> records a commit on your computer.</li><li><strong>Remote repository</strong>: <code>git push</code> uploads the commit to GitHub.</li></ol><pre class="kb-code"><code>git status
 git add README.md
 git commit -m "docs: update README"
@@ -54,16 +54,54 @@ git revert &lt;commit&gt;
 # Find lost commits or branch pointers
 git reflog</code></pre><p><code>reset --hard</code> discards working-tree content. For shared branches, prefer <code>revert</code> when correcting history.</p></div>
       <div class="kb-section"><h2 id="review">5. Commit and review conventions</h2><ul><li>Keep each commit focused on one logical change so it is easy to understand, review, and revert.</li><li>Use a short prefix for the type and scope, for example <code>docs(git): clarify restore examples</code>.</li><li>Review the complete diff and check for secrets, temporary files, or unrelated changes before committing.</li><li>Record review feedback and verification results before merging; add a clear follow-up commit when changes are needed.</li></ul></div>
-      <div class="kb-section"><h2 id="publish">6. Publish to a remote repository</h2><pre class="kb-code"><code>git fetch origin
-git switch main
-git pull --ff-only origin main
-git switch -c docs/update-git-notes
-# Edit Git documentation or related files
-git diff --check
-git add path/to/changed-files
-git commit -m "docs(git): update workflow notes"
-git push -u origin HEAD</code></pre></div>
-      <div class="kb-section"><h2>References</h2><p><a href="https://git-scm.com/docs/git-branch" target="_blank" rel="noopener">Git branches</a> · <a href="https://git-scm.com/docs/git-rebase" target="_blank" rel="noopener">Git rebase</a> · <a href="https://git-scm.com/docs/git-pull" target="_blank" rel="noopener">Git pull</a></p><p><a href="/knowledge-base/en/">Back to Knowledge Base</a></p></div>
+      <div class="kb-section"><h2 id="examples">6. Practical example: commit only the intended change</h2><p>Suppose <code>README.md</code> and a local configuration file have changed, but only the documentation belongs in this commit:</p><pre class="kb-code"><code>git status -sb
+git diff -- README.md
+git add README.md
+git diff --cached
+git diff --cached --check
+git commit -m "docs: clarify setup steps"</code></pre><p>If you staged the wrong file, run <code>git restore --staged -- README.md</code>; the working-tree edit remains. Use <code>git add -p</code> to select individual hunks.</p></div>
+      <div class="kb-section"><h2 id="team-demo">7. Two-person collaboration demo: branch, review, merge, sync</h2><p>Adapted from the local Git feature-branch and multi-person conflict demos. Run this in PowerShell. It creates a temporary bare remote and two independent clones for Alice and Bob, leaving real repositories untouched.</p>
+        <h3>7.1 Create a temporary remote and two clones</h3>
+        <pre class="kb-code"><code>$demoRoot = Join-Path $env:TEMP ("git-team-demo-" + [guid]::NewGuid().ToString("N"))
+$remote = Join-Path $demoRoot "remote.git"
+$alice = Join-Path $demoRoot "alice"
+$bob = Join-Path $demoRoot "bob"
+New-Item -ItemType Directory -Path $demoRoot | Out-Null
+git init --bare $remote
+git --git-dir=$remote symbolic-ref HEAD refs/heads/main
+git clone $remote $alice
+git -C $alice config user.name Alice
+git -C $alice config user.email alice@example.test
+Set-Content (Join-Path $alice "README.md") "Team notes"
+git -C $alice add README.md
+git -C $alice commit -m "docs: start team notes"
+git -C $alice push -u origin main
+git clone $remote $bob
+git -C $bob config user.name Bob
+git -C $bob config user.email bob@example.test</code></pre>
+        <h3>7.2 Alice proposes a branch; Bob reviews and merges</h3>
+        <pre class="kb-code"><code>git -C $alice switch -c docs/add-workflow
+Add-Content (Join-Path $alice "README.md") "Review changes before merging."
+git -C $alice add README.md
+git -C $alice commit -m "docs: add review workflow"
+git -C $alice push -u origin docs/add-workflow
+
+git -C $bob fetch origin
+git -C $bob diff origin/main...origin/docs/add-workflow
+git -C $bob log --oneline origin/main..origin/docs/add-workflow
+git -C $bob switch main
+git -C $bob merge --no-ff origin/docs/add-workflow -m "merge: add review workflow"
+git -C $bob push origin main
+
+git -C $alice switch main
+git -C $alice pull --ff-only origin main
+git -C $alice log --oneline --graph -4</code></pre>
+        <p>Expected result: Bob sees Alice's one-line addition in the diff; after the merge, Alice's <code>main</code> fast-forwards to the latest version. In a real GitHub team, Alice opens a pull request and Bob reviews and merges it in the UI rather than pushing directly to a protected <code>main</code> branch.</p><p>The repository also provides a <a href="https://github.com/yanruihe/yanruihe.github.io/blob/main/knowledge-base/examples/git/team-demo.ps1">PowerShell demo script</a> that verifies the result and leaves the temporary directory available for inspection.</p>
+        <h3>7.3 Further practice: conflicting edits</h3>
+        <p>The local conflict demo has Alice and Bob edit the same line of <code>message.txt</code>. Alice pushes first; Bob's push is rejected. Bob fetches, merges <code>origin/main</code> into his branch, resolves the <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code>, and <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> markers by reading both changes, verifies the result, then commits. Do not blindly choose “ours” or “theirs.”</p>
+      </div>
+      <div class="kb-section"><h2 id="incidents">8. Incident examples: leaked credential and lost commit</h2><ul><li><strong>Credential already pushed</strong>: revoke or rotate it at the provider first. Add <code>.env</code> to <code>.gitignore</code> and use <code>git rm --cached -- .env</code> to stop tracking it. Deleting it in a new commit does not remove it from older history, forks, or caches. Coordinate shared-history cleanup with the team.</li><li><strong>Lost local commit</strong>: find it with <code>git reflog</code>, then create <code>git branch rescue/recovered &lt;commit-id&gt;</code> and inspect it. Do not reset a shared branch to recover a local commit.</li></ul></div>
+      <div class="kb-section"><h2>References</h2><p>Examples adapted from the local <code>F:\MyBrain\git</code> knowledge base.</p><p><a href="https://git-scm.com/docs/git-branch" target="_blank" rel="noopener">Git branches</a> · <a href="https://git-scm.com/docs/git-merge" target="_blank" rel="noopener">Git merge</a> · <a href="https://git-scm.com/docs/git-reflog" target="_blank" rel="noopener">Git reflog</a></p><p><a href="/knowledge-base/en/">Back to Knowledge Base</a></p></div>
     </div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Git Knowledge Base</div></div></footer></div>

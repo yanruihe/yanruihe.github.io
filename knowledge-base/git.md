@@ -82,18 +82,79 @@ git reflog
 - 提交前检查完整 diff，确认没有密钥、临时文件或无关改动。
 - 合并前记录评审意见和验证结果；修正问题时追加清晰的提交。
 
-## 6. 发布到远程仓库
+## 6. 实际案例：只提交需要的改动
+
+场景：`README.md` 和本地配置都改了，但这次只发布文档。先看差异，再明确暂存范围：
 
 ```bash
-git fetch origin
-git switch main
-git pull --ff-only origin main
-git switch -c docs/update-git-notes
-# 修改 Git 文档或相关文件
-git diff --check
-git add path/to/changed-files
-git commit -m "docs(git): update workflow notes"
-git push -u origin HEAD
+git status -sb
+git diff -- README.md
+git add README.md
+git diff --cached
+git diff --cached --check
+git commit -m "docs: clarify setup steps"
 ```
 
-参考：[Git 分支文档](https://git-scm.com/docs/git-branch)、[Git 变基文档](https://git-scm.com/docs/git-rebase)、[Git 拉取文档](https://git-scm.com/docs/git-pull)。
+如果暂存错了，用 `git restore --staged -- README.md` 移出暂存区；工作区的编辑仍然保留。需要按代码块选择时可用 `git add -p`。
+
+## 7. 双人协作 Demo：分支、评审、合并与同步
+
+下面根据本地 `git/demo/02-功能分支开发并合并.md` 和 `git/demo/03-多人同时修改导致冲突.md` 改写。使用 PowerShell，在临时目录中模拟远端、Alice 和 Bob 三个独立仓库；不会改动真实项目。
+
+### 7.1 建立临时远端和两个工作副本
+
+```powershell
+$demoRoot = Join-Path $env:TEMP ("git-team-demo-" + [guid]::NewGuid().ToString("N"))
+$remote = Join-Path $demoRoot "remote.git"
+$alice = Join-Path $demoRoot "alice"
+$bob = Join-Path $demoRoot "bob"
+New-Item -ItemType Directory -Path $demoRoot | Out-Null
+git init --bare $remote
+git --git-dir=$remote symbolic-ref HEAD refs/heads/main
+git clone $remote $alice
+git -C $alice config user.name Alice
+git -C $alice config user.email alice@example.test
+Set-Content (Join-Path $alice "README.md") "Team notes"
+git -C $alice add README.md
+git -C $alice commit -m "docs: start team notes"
+git -C $alice push -u origin main
+git clone $remote $bob
+git -C $bob config user.name Bob
+git -C $bob config user.email bob@example.test
+```
+
+### 7.2 Alice 提交功能分支，Bob 评审并合并
+
+```powershell
+git -C $alice switch -c docs/add-workflow
+Add-Content (Join-Path $alice "README.md") "Review changes before merging."
+git -C $alice add README.md
+git -C $alice commit -m "docs: add review workflow"
+git -C $alice push -u origin docs/add-workflow
+
+git -C $bob fetch origin
+git -C $bob diff origin/main...origin/docs/add-workflow
+git -C $bob log --oneline origin/main..origin/docs/add-workflow
+git -C $bob switch main
+git -C $bob merge --no-ff origin/docs/add-workflow -m "merge: add review workflow"
+git -C $bob push origin main
+
+git -C $alice switch main
+git -C $alice pull --ff-only origin main
+git -C $alice log --oneline --graph -4
+```
+
+预期：Bob 的差异检查只看到 Alice 的一行新增内容；合并后 Alice 的 `main` 能快进到最新版本。真实 GitHub 团队一般由 Alice 发起 Pull Request、Bob 在网页上评审并合并，而不是让 Bob 直接推送受保护的 `main`；最后 Alice 同步主线。
+
+也可以下载并运行仓库中的 [PowerShell 演练脚本](examples/git/team-demo.ps1)；脚本会验证最终结果，并保留临时目录供检查。
+
+### 7.3 进阶练习：两人修改同一行造成冲突
+
+本地 `git/demo/03-多人同时修改导致冲突.md` 还演示了：Alice 和 Bob 分别修改 `message.txt` 的同一行；Alice 先推送，Bob 的推送被拒绝。Bob 先 `git fetch origin`，再在自己的分支合并 `origin/main`，手工处理 `<<<<<<<`、`=======`、`>>>>>>>` 标记，运行验证后提交。不要直接选择“保留我的/对方的”来代替阅读实际内容。
+
+## 8. 故障案例：密钥泄露与误删提交
+
+- **密钥已推送**：先在服务端吊销或轮换密钥，再用 `.gitignore` 和 `git rm --cached -- .env` 防止再次提交。删除文件并不能从旧提交、fork 或缓存中清除密钥；共享仓库的历史清理需要团队协调。
+- **误删本地提交**：先用 `git reflog` 找到原提交，再建立 `git branch rescue/recovered <commit-id>` 检查内容。不要在共享分支上直接使用 `reset --hard`。
+
+以上案例来自本地 `F:\MyBrain\git` 知识库。参考：[Git 分支文档](https://git-scm.com/docs/git-branch)、[Git 合并文档](https://git-scm.com/docs/git-merge)、[Git reflog 文档](https://git-scm.com/docs/git-reflog)。

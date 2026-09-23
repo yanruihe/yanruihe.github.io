@@ -1,0 +1,12 @@
+[Unit]
+Description=Yocto demo service
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/hello-yocto.sh
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

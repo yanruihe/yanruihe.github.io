@@ -21,7 +21,7 @@
     <div class="article-title"><span class="title-hover-animation">Yocto Knowledge Base</span></div>
     <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Yocto</span></div><div class="kb-meta">BitBake / Layers / Recipes / Images / devtool</div></div></div>
     <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>Organize hardware, software packages, and distribution configuration into reproducible system images.</p><p>The commands are generic examples. Always confirm that the layers and Yocto release branches are compatible before building.</p></div>
+      <div class="kb-lead"><p>Organize hardware, software packages, and distribution configuration into reproducible system images.</p><p>The commands are generic examples. Always confirm that the layers and Yocto release branches are compatible before building. Jump to the <a href="#systemd-demo">systemd service demo</a> or <a href="#missing-package">troubleshooting example</a>.</p></div>
       <div class="kb-section"><h2 id="concepts">1. Core concepts</h2><p>Yocto Project is not a fixed distribution. It is a set of tools and metadata for building customized Linux systems with OpenEmbedded.</p><ul><li><strong>BitBake</strong>: parses metadata and executes tasks.</li><li><strong>Recipe</strong>: describes source, dependencies, compilation, installation, and packaging.</li><li><strong>Layer</strong>: isolates and composes recipes, classes, machine, and distribution configuration.</li><li><strong>Machine</strong>: describes the target hardware; an <strong>Image</strong> describes the final system image.</li></ul><pre class="kb-code"><code>Layer → Recipe → Package → Image
   └──── Machine / Distro configuration affects parsing and build results</code></pre></div>
       <div class="kb-section"><h2 id="quick-start">2. Initialize and build</h2><p>This is a generic flow. The <code>poky</code>, BSP, and other layers must be on compatible release branches:</p><pre class="kb-code"><code>git clone https://git.yoctoproject.org/poky
@@ -63,6 +63,33 @@ bitbake &lt;recipe&gt; -c cleansstate
 # Find which package owns a file
 oe-pkgdata-util find-path /usr/bin/&lt;program&gt;</code></pre><p>For a missing recipe, check layers and the recipe name. For configuration that is not taking effect, inspect its origin with <code>bitbake -e</code>. For incremental build problems, clean only the affected task or recipe first.</p></div>
       <div class="kb-section"><h2 id="release">7. Reproducibility and release</h2><ul><li>Pin a manifest, layer branch, or commit instead of recording only a vague version.</li><li>Record <code>MACHINE</code>, image target, build time, build host, and important configuration.</li><li>Put custom layers, recipes, patches, and <code>conf</code> configuration in Git; do not commit <code>tmp/</code>, <code>downloads/</code>, or <code>sstate-cache/</code>.</li><li>Run a clean build or CI verification before release and preserve the image checksum.</li></ul></div>
+      <div class="kb-section"><h2 id="systemd-demo">8. Practical example: add a systemd service to an image</h2><p>Adapted from local <code>F:\MyBrain\yocto\examples\meta-demo</code> and the systemd-service notes. The site repository includes the <a href="https://github.com/yanruihe/yanruihe.github.io/tree/main/knowledge-base/examples/meta-demo">downloadable meta-demo layer</a>, so readers do not need the local <code>F:</code> drive. This is a complete layer with a recipe, script, service unit, and image recipe:</p><pre class="kb-code"><code>meta-demo/
+├── conf/layer.conf
+├── recipes-demo/hello-yocto/hello-yocto_1.0.bb
+├── recipes-demo/hello-yocto/files/hello-yocto.sh
+├── recipes-demo/hello-yocto/files/hello-yocto.service
+└── recipes-core/images/demo-image.bb</code></pre><p>The recipe installs the script and unit and enables the service. The image recipe adds the package with <code>IMAGE_INSTALL:append = " hello-yocto"</code>. The script updates <code>/run/hello-yocto/status</code> every ten seconds. Key lines from the local recipe are below; confirm that <code>UNPACKDIR</code> usage matches your Yocto release:</p><pre class="kb-code"><code>SRC_URI = "file://hello-yocto.sh file://hello-yocto.service"
+S = "${UNPACKDIR}"
+inherit allarch systemd
+
+do_install() {
+    install -d ${D}${bindir} ${D}${systemd_system_unitdir}
+    install -m 0755 ${UNPACKDIR}/hello-yocto.sh ${D}${bindir}/hello-yocto.sh
+    install -m 0644 ${UNPACKDIR}/hello-yocto.service ${D}${systemd_system_unitdir}/hello-yocto.service
+}
+SYSTEMD_SERVICE:${PN} = "hello-yocto.service"
+SYSTEMD_AUTO_ENABLE = "enable"</code></pre><p>The full file also needs metadata such as <code>SUMMARY</code> and <code>LICENSE</code>; use real license information in production. Copy the local example layer into your workspace, then run in Linux/WSL2 from a directory containing <code>poky</code>:</p><pre class="kb-code"><code>source poky/oe-init-build-env build-demo
+bitbake-layers add-layer /path/to/meta-demo
+# Set INIT_MANAGER = "systemd" in conf/local.conf
+bitbake-layers show-recipes hello-yocto
+bitbake demo-image</code></pre><p>Replace <code>/path/to/meta-demo</code> with the actual path. <code>INIT_MANAGER</code> is a configuration-file setting, not a shell command. Choose <code>runqemu</code> arguments for your machine and image format, then verify on the target:</p><pre class="kb-code"><code>systemctl is-enabled hello-yocto.service
+systemctl status hello-yocto.service
+cat /run/hello-yocto/status
+journalctl -u hello-yocto.service -b --no-pager</code></pre><p>For production, check the real license, non-root execution, and the BSP's init configuration. <code>LICENSE = "CLOSED"</code> in this example is for a local demo only.</p></div>
+      <div class="kb-section"><h2 id="missing-package">9. Troubleshooting example: package built, service absent from image</h2><p>Following the local debugging notes, check each link in the chain: layer → recipe → package → image → runtime.</p><pre class="kb-code"><code>bitbake-layers show-layers
+bitbake-layers show-recipes hello-yocto
+bitbake -e demo-image | grep '^IMAGE_INSTALL='
+oe-pkgdata-util find-pkg hello-yocto</code></pre><p>If the recipe exists but <code>IMAGE_INSTALL</code> omits the package, check the image recipe and package name. If the package is present but the service does not start, inspect <code>INIT_MANAGER</code>, unit installation path, <code>SYSTEMD_SERVICE:${PN}</code>, <code>systemctl status</code>, and <code>journalctl</code>. Do not start by deleting all of <code>tmp/</code> or the shared cache.</p></div>
       <div class="kb-section"><h2>References</h2><p><a href="https://docs.yoctoproject.org/overview-manual/concepts.html" target="_blank" rel="noopener">Yocto Project concepts</a> · <a href="https://docs.yoctoproject.org/dev/dev-manual/layers.html" target="_blank" rel="noopener">Creating layers</a> · <a href="https://docs.yoctoproject.org/dev-manual/new-recipe.html" target="_blank" rel="noopener">Writing a recipe</a> · <a href="https://docs.yoctoproject.org/dev-manual/devtool.html" target="_blank" rel="noopener">devtool</a> · <a href="https://docs.yoctoproject.org/bitbake/dev/singleindex.html" target="_blank" rel="noopener">BitBake documentation</a></p><p><a href="/knowledge-base/en/">Back to Knowledge Base</a> · <a href="/knowledge-base/en/git/">Previous: Git Knowledge Base</a></p></div>
     </div>
   </div></div></div></div>
