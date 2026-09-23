@@ -29,6 +29,11 @@
     '评论': 'Comments',
     '更新于': 'Updated',
     '搜索...': 'Search...',
+    '知识库入口': 'Knowledge Base',
+    '集中查阅 Git 与 Yocto 知识，按专题、流程和验证记录快速定位。': 'Browse Git and Yocto knowledge by topic, workflow, and verification record.',
+    'Git 工作流、分支、提交和恢复': 'Git workflows, branches, commits, and recovery',
+    'Yocto 构建、Layer、Recipe 和 devtool': 'Yocto builds, layers, recipes, and devtool',
+    '进入知识库': 'Open Knowledge Base',
     '知识库页面': 'Knowledge Base Page',
     '驱动': 'powered by',
     '主题': 'Theme',
@@ -130,6 +135,9 @@
     document.querySelectorAll('[data-language-toggle]').forEach(function (button) {
       button.textContent = language === 'en' ? '中文' : 'English';
       button.setAttribute('aria-label', language === 'en' ? 'Switch to Chinese' : 'Switch to English');
+    });
+    document.querySelectorAll('[data-zh-href][data-en-href]').forEach(function (link) {
+      link.setAttribute('href', language === 'en' ? link.dataset.enHref : link.dataset.zhHref);
     });
     setTitle(language);
   }

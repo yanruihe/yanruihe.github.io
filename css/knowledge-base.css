@@ -76,6 +76,37 @@
   background: var(--background-color-2);
   border-radius: 0.3rem;
 }
+.kb-home-entry {
+  margin-bottom: 2rem;
+  padding: 1.6rem;
+  background: var(--content-background-color);
+  border-radius: 0.4rem;
+  box-shadow: 2px 2px 5px var(--shadow-color);
+}
+.kb-home-entry h2 {
+  margin-top: 0;
+  color: var(--text-color-2);
+}
+.kb-home-entry > p {
+  color: var(--text-color-3);
+  line-height: 2;
+}
+.kb-home-entry .kb-card-grid {
+  margin-bottom: 1rem;
+}
+.kb-home-entry .read-more {
+  display: inline-block;
+  padding: 0.45rem 0.8rem;
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  border-radius: 0.3rem;
+}
+@media (max-width: 500px) {
+  .kb-home-entry {
+    padding: 1.2rem;
+    box-shadow: none;
+  }
+}
 @media (max-width: 700px) {
   .kb-card-grid {
     grid-template-columns: 1fr;
