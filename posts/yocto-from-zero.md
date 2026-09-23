@@ -115,6 +115,23 @@ journalctl -u hello-yocto.service -b --no-pager
 
 记录三个仓库的 commit、`MACHINE`、`DISTRO`、`INIT_MANAGER`、所用 layer 修订和镜像产物。针对目标板选择兼容 6.0.2 的 BSP layer，然后检查 Bootloader、内核配置、设备树、分区布局、串口、网络、刷机与回滚流程。要改项目功能，提交 layer/recipe/config，不直接编辑 `tmp/work/` 或部署镜像。构建失败先看对应任务的 `temp/log.do_*`，运行失败先看串口、`systemctl status` 和 `journalctl`。
 
+### RK3588：内核使用 Rockchip 仓库默认分支
+
+前面的 `qemux86-64` 镜像使用 x86_64 目标内核，不能直接换成 ARM64 的 RK3588 内核。适配 RK3588 时，应使用支持该板的 BSP layer/MACHINE，并让该 BSP 的 kernel recipe 从 [Rockchip kernel 官方仓库](https://github.com/rockchip-linux/kernel)取源码。本文核对时仓库默认分支是 [`develop-6.1`](https://github.com/rockchip-linux/kernel/tree/develop-6.1)，HEAD 为 `77168c8d5ab82399f65a80e9f807b50ba37cf483`。
+
+在 BSP 提供的 kernel recipe 或其 `.bbappend` 中，Git 源通常按以下方式声明；具体 recipe 名、补丁、defconfig 和 DTB 仍以所选 BSP 为准：
+
+```bitbake
+SRC_URI = "git://github.com/rockchip-linux/kernel.git;protocol=https;branch=develop-6.1"
+SRCREV = "77168c8d5ab82399f65a80e9f807b50ba37cf483"
+```
+
+若通过 `.bbappend` 改已有 recipe，不要不加检查地用新的 `SRC_URI =` 覆盖原值；先确认 BSP 是否还从原 `SRC_URI` 引入补丁、defconfig、配置 fragment 或其他文件，再按对应 provider 的写法调整源码地址并保留这些输入。
+
+`branch=develop-6.1` 明确选择该默认分支；示例中的 `SRCREV` 则固定到核对时的 HEAD，方便复现。若要在开发环境持续跟踪分支，可有意使用 `${AUTOREV}`，但构建结果会随远端移动，且需要额外考虑 BitBake 查询远端与缓存行为。发布构建应锁定经过验证的完整 commit SHA，并把 kernel、BSP layer、机器配置、内核 fragment 和 DTB 一起记录。不要把 ARM64 kernel 配进本文的 x86 QEMU `MACHINE`。
+
+配置修改应通过 Yocto kernel 开发流程完成，而不是手工长期编辑 `tmp/work/.../.config`：在正确的 build 环境中对对应内核运行 `menuconfig`，用 `diffconfig`/配置 fragment 留下最小改动，并把 fragment 放入自有 layer。先检查最终 `virtual/kernel` provider、`SRC_URI`、`SRCREV`、`KERNEL_DEVICETREE` 与实际 machine，再构建并在 RK3588 板上验证启动日志和驱动枚举。Kconfig 依赖、defconfig 与驱动如何进入编译目标，另见 [U-Boot 与 Linux 内核 Kconfig 核心机制](/posts/kconfig-uboot-kernel/)。
+
 ## 6. 看懂 BitBake 任务与构建目录
 
 `bitbake core-image-minimal` 的参数是一个 recipe 名称，不是 Linux 内核的 `make` 目标。BitBake 先解析可见 layers 和配置，再计算任务依赖；某个包的构建通常包含 `do_fetch`、`do_unpack`、`do_patch`、`do_configure`、`do_compile`、`do_install` 和 `do_package` 等任务。任务之间可能并行，未变化的任务会利用 `sstate-cache` 复用结果。因此第一次构建很慢，后续的小改动通常只重建受影响的任务。

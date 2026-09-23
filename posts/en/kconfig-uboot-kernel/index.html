@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Understand Kconfig symbols, dependencies, defconfigs, generated configuration, Kbuild, and RK3588 examples."><title>Kconfig in U-Boot and the Linux Kernel | Rui&#39;s Blog</title><link rel="canonical" href="https://yanruihe.github.io/posts/en/kconfig-uboot-kernel/"><link rel="alternate" hreflang="zh-CN" href="https://yanruihe.github.io/posts/kconfig-uboot-kernel/"><link rel="alternate" hreflang="en" href="https://yanruihe.github.io/posts/en/kconfig-uboot-kernel/"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/i18n.css"><link rel="stylesheet" href="/css/knowledge-base.css"><link rel="shortcut icon" href="/images/logo.jpg"></head>
+<body><main class="page-container"><div class="page-main-content"><div class="page-main-content-top"><header class="header-wrapper"><div class="header-content"><div class="left"><a class="logo-image" href="/"><img src="/images/logo.jpg" alt="Rui"></a><a class="logo-title" href="/">Rui&#39;s Blog</a></div><div class="right"><div class="pc"><ul class="menu-list"><li class="menu-item"><a href="/">Home</a></li><li class="menu-item"><a href="/archives">Archives</a></li><li class="menu-item"><a href="/knowledge-base/en/">Knowledge Base</a></li><li class="menu-item"><a href="/about">About</a></li></ul></div></div></div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
+<div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container"><div class="article-title"><span class="title-hover-animation">Kconfig in U-Boot and the Linux Kernel</span></div><div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">U-Boot / Linux Kconfig</span></div><div class="kb-meta">2026-09-24 · RK3588 · U-Boot / Linux Kconfig</div></div></div><div class="article-content keep-markdown-body"><div class="kb-lead"><p>Both U-Boot and the Linux kernel use Kconfig to describe optional features, platform constraints, and dependencies. The useful skill is not memorizing menu paths; it is tracing a symbol from its definition and visibility through value resolution, <code>.config</code>, generated headers, and the final object files. Examples below use Rockchip U-Boot and Linux 6.1 for RK3588.</p>
+<blockquote>
+<p><strong>Source baseline:</strong> Linux uses the current default branch, <code>develop-6.1</code>, of <a href="https://github.com/rockchip-linux/kernel"><code>rockchip-linux/kernel</code></a>, checked at <code>77168c8d5ab82399f65a80e9f807b50ba37cf483</code>. U-Boot uses the current default branch, <code>next-dev</code>, of <a href="https://github.com/rockchip-linux/u-boot"><code>rockchip-linux/u-boot</code></a>, checked at <code>1c535d65b8509f388d09e49fb6961f49fda35a1d</code>. Both branches can move; record the actual commit when reproducing or releasing a build.</p>
+</blockquote>
+<p class="kb-toc"><a href="#flow">1. How a configuration reaches firmware</a> · <a href="#types">2. Symbol types and values</a> · <a href="#depends-on">3. <code>depends on</code>: visibility and value limits</a> · <a href="#select-imply">4. <code>select</code> and <code>imply</code>: use reverse dependencies carefully</a> · <a href="#config-files">5. <code>.config</code>, defconfig, and generated files</a> · <a href="#make-objects">6. From <code>CONFIG_*</code> to an object file</a> · <a href="#rk3588">7. RK3588 example: Kconfig and device tree do different jobs</a> · <a href="#build-systems">8. Preserving kernel configuration in Buildroot and Yocto</a> · <a href="#debugging">9. Symptoms and a practical debug order</a> · <a href="#references">Source and documentation references</a></p></div>
+<div class="kb-section"><h2 id="flow">1. How a configuration reaches firmware</h2>
+<pre class="kb-code"><code class="language-text">Kconfig files define symbols, types, dependencies, defaults, and menus
+        ↓
+defconfig provides a product/board starting point
+        ↓  menuconfig / olddefconfig / savedefconfig
+.config stores the resolved selection
+        ↓  Kconfig generates Make-readable settings and headers
+Makefiles use CONFIG_* to choose directories, objects, and rules
+        ↓
+U-Boot / Image / modules and other build outputs
+</code></pre>
+<p>Kconfig does not compile C files or determine whether hardware is physically wired. It computes which features are allowed in this build, then passes the result to Kbuild, U-Boot makefiles, and the C preprocessor. Finding a <code>CONFIG_*</code> name in source does not mean it is <code>y</code> in the current <code>.config</code>; writing it into <code>.config</code> does not bypass Kconfig dependencies either.</p>
+</div>
+<div class="kb-section"><h2 id="types">2. Symbol types and values</h2>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Type</th>
+<th>Typical use</th>
+<th>Values/examples</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bool</code></td>
+<td>A feature that is on or off</td>
+<td><code>y</code> / <code>n</code></td>
+</tr>
+<tr>
+<td><code>tristate</code></td>
+<td>A kernel feature built in, as a module, or disabled</td>
+<td><code>y</code> / <code>m</code> / <code>n</code></td>
+</tr>
+<tr>
+<td><code>string</code></td>
+<td>Paths, names, and string parameters</td>
+<td><code>&quot;ttyS0&quot;</code></td>
+</tr>
+<tr>
+<td><code>int</code>, <code>hex</code></td>
+<td>Numeric values, addresses, or masks</td>
+<td><code>115200</code>, <code>0x...</code></td>
+</tr>
+</tbody>
+</table>
+<p>For a Linux <code>tristate</code>, <code>y</code> builds into the kernel, <code>m</code> builds a module, and <code>n</code> omits the feature; <code>m</code> is available only when module support and dependencies permit it. The generated C macros differ too: built-in code generally sees <code>CONFIG_FOO</code>, while a module is represented by <code>CONFIG_FOO_MODULE</code>. In C, use kernel helpers such as <code>IS_ENABLED()</code> or <code>IS_REACHABLE()</code> where appropriate; do not assume <code>#ifdef CONFIG_FOO</code> treats <code>m</code> and <code>y</code> as equivalent.</p>
+<p>Linux uses <code>tristate</code> widely to distinguish built-in code from modules. U-Boot board features generally use <code>bool</code>, string, and numeric options and are linked into the U-Boot image; do not apply Linux's <code>=m</code> module model to U-Boot. The projects share Kconfig's core language and configuration flow, but their symbols, defconfigs, generated files, and build targets remain independent.</p>
+<p><code>choice</code> expresses mutually exclusive options, such as selecting one implementation or default source. <code>default</code> is used when the user has not overridden a value; it is not a force-enable directive. <code>def_bool</code> and <code>def_tristate</code> combine a type with a default expression.</p>
+</div>
+<div class="kb-section"><h2 id="depends-on">3. <code>depends on</code>: visibility and value limits</h2>
+<p>Menu structure and dependencies jointly constrain a symbol. Dependencies from parent menus propagate to their children; if a <code>depends on</code> condition is false, an option may disappear from <code>menuconfig</code>, and a previously saved value can be recalculated to a permitted value. Kconfig uses three-valued logic, and multiple dependencies generally behave like logical AND.</p>
+<p>In Rockchip Linux 6.1, <code>sound/soc/rockchip/Kconfig</code> makes the I2S/TDM driver depend on Rockchip ASoC support and the clock framework, in this form:</p>
+<pre class="kb-code"><code class="language-Kconfig">config SND_SOC_ROCKCHIP_I2S_TDM
+	tristate &quot;Rockchip I2S/TDM Device Driver&quot;
+	depends on HAVE_CLK &amp;&amp; SND_SOC_ROCKCHIP
+</code></pre>
+<p>If the option is missing from the menu, first inspect parent options such as <code>SND_SOC</code>, <code>SND_SOC_ROCKCHIP</code>, <code>HAVE_CLK</code>, and the actual Kconfig definition in the checked-out tree. Do not start by forcing <code>CONFIG_SND_SOC_ROCKCHIP_I2S_TDM=y</code> into <code>.config</code>: the next configuration run can clear or rewrite a value whose dependencies are unmet.</p>
+<p><code>depends on</code> also limits the maximum value. If a dependency is <code>m</code>, a dependent tristate cannot be <code>y</code>. A greyed-out item and a symbol that is entirely absent are different cases; pressing <code>/</code> in <code>menuconfig</code> usually shows the definition location and dependency chain.</p>
+</div>
+<div class="kb-section"><h2 id="select-imply">4. <code>select</code> and <code>imply</code>: use reverse dependencies carefully</h2>
+<p><code>select FOO</code> raises the minimum value of <code>FOO</code> from the user's option, but does not fully check <code>FOO</code>'s own dependencies. This can create a combination that cannot build safely. Kernel Kconfig guidance therefore recommends using <code>select</code> carefully, generally for hidden helper symbols without additional dependencies.</p>
+<p><code>imply FOO</code> is a weaker recommendation: it tends to enable <code>FOO</code>, but a user or direct dependency can still turn it off. A visible hardware driver should normally express its prerequisites with <code>depends on</code>, rather than <code>select</code> another driver with complex dependencies.</p>
+<pre class="kb-code"><code class="language-Kconfig">config DRIVER_A
+	tristate &quot;Driver A&quot;
+	depends on I2C
+
+config DRIVER_A_HELPER
+	bool
+	select GENERIC_HELPER
+</code></pre>
+<p>Here the visible driver declares its bus requirement; <code>select</code> is reserved for a hidden helper without complex prerequisites. Do not copy this pattern blindly: inspect the selected symbol's definition and constraints first.</p>
+</div>
+<div class="kb-section"><h2 id="config-files">5. <code>.config</code>, defconfig, and generated files</h2>
+<ul>
+<li><strong><code>defconfig</code></strong>: a product or board starting configuration, usually a compact set of differences from defaults for easier review and maintenance. It is not necessarily the complete final <code>.config</code>.</li>
+<li><strong><code>.config</code></strong>: the resolved configuration for the current source tree, architecture, and dependencies. After switching branches or Kconfig definitions, an old config may gain new options, retain removed ones, or resolve to different defaults.</li>
+<li><strong>Generated configuration files</strong>: Kconfig/Kbuild converts options into Make-readable files such as <code>auto.conf</code> and headers for C code. These are normally regenerated by the build system; they should not be the sole product configuration source.</li>
+</ul>
+<p>U-Boot also has a compatibility layer for its older configuration system: Kconfig generates configuration files, while the build can still produce <code>include/config.h</code>, <code>include/autoconf.mk</code>, and SPL/TPL compatibility files; some legacy macros remain in <code>include/configs/&lt;board&gt;.h</code>. Define new configuration options in Kconfig rather than assuming U-Boot and Linux have identical generated-file layouts.</p>
+<p>Common kernel commands:</p>
+<pre class="kb-code"><code class="language-bash"># Rockchip Linux 6.1; this seed still needs the actual board configuration
+make ARCH=arm64 rockchip_linux_defconfig
+make ARCH=arm64 menuconfig
+make ARCH=arm64 olddefconfig
+make ARCH=arm64 savedefconfig
+</code></pre>
+<p>U-Boot uses a target board defconfig. This Rockchip U-Boot branch includes <code>rk3588_defconfig</code>:</p>
+<pre class="kb-code"><code class="language-bash">make rk3588_defconfig
+make menuconfig
+make olddefconfig
+make savedefconfig
+</code></pre>
+<p>Do not treat <code>make defconfig</code> as a universal board configuration: in U-Boot this shortcut is generally for sandbox. For RK3588, use the target board/BSP defconfig. After saving a compact configuration, review the defconfig diff and regenerate <code>.config</code> in a clean output directory to confirm that the required settings are retained.</p>
+</div>
+<div class="kb-section"><h2 id="make-objects">6. From <code>CONFIG_*</code> to an object file</h2>
+<p>Kconfig affects output only when a makefile or C source consumes the symbol. For example, Kbuild often uses:</p>
+<pre class="kb-code"><code class="language-make">obj-$(CONFIG_SND_SOC_ROCKCHIP_I2S_TDM) += rockchip_i2s_tdm.o
+</code></pre>
+<p>For <code>CONFIG_...=y</code>, the object joins the built-in target; for <code>m</code>, it is built as a module; for <code>n</code>, it is omitted. C source can also use <code>#if IS_ENABLED(CONFIG_FOO)</code> around optional code. If a menu says enabled but an object is missing, trace three things: the final <code>.config</code> value, the Makefile's <code>obj-*</code> condition, and whether the build log visits that directory. Also verify the output directory and source tree; it is easy to inspect configuration A while compiling configuration B.</p>
+</div>
+<div class="kb-section"><h2 id="rk3588">7. RK3588 example: Kconfig and device tree do different jobs</h2>
+<p>Rockchip U-Boot's <code>configs/rk3588_defconfig</code> enables SoC-related settings such as <code>CONFIG_ARCH_ROCKCHIP=y</code> and <code>CONFIG_ROCKCHIP_RK3588=y</code>. Linux has its own Kconfig symbols, including <code>CONFIG_ARCH_ROCKCHIP</code> and driver options such as <code>CONFIG_SND_SOC_ROCKCHIP_I2S_TDM</code>. The same <code>CONFIG_</code> prefix appears in both projects, but the symbols belong to separate source trees and separate build outputs.</p>
+<p>For I2S/TDM, Kconfig makes the driver eligible for compilation. The RK3588/board device tree's <code>compatible</code>, <code>status</code>, pinctrl, clocks, DMA, and sound-card links describe runtime device instances and connections. A driver compiled into the kernel will not probe if the DTS node is disabled; a DTS node marked <code>okay</code> cannot work if the driver was not built. Check <code>.config</code>, the actual DTB, driver-binding logs, and the board schematic together.</p>
+<pre class="kb-code"><code class="language-text">Kconfig allows the driver to be built
+       + target .config selects it as y/m
+       + DTS describes a compatible, enabled device
+       + board clocks/power/pinctrl/wiring are correct
+       ↓
+probe can succeed and the device can operate
+</code></pre>
+</div>
+<div class="kb-section"><h2 id="build-systems">8. Preserving kernel configuration in Buildroot and Yocto</h2>
+<p>Buildroot provides <code>make linux-menuconfig</code> to edit kernel settings and <code>make linux-update-defconfig</code> to save them. Save into a version-controlled board configuration rather than keeping only the full <code>.config</code> from one build directory.</p>
+<p>Yocto's kernel recipe assembles the final <code>.config</code> from a <code>defconfig</code> or configuration fragments. In the correct build environment, run <code>menuconfig</code> for the selected kernel provider, capture only intended changes with <code>diffconfig</code>/configuration fragments, and store those fragments in a product layer. Do not maintain hand edits to <code>tmp/work/.../.config</code>; BitBake configuration tasks can regenerate it. After changing a kernel branch or commit, verify that every fragment still applies and that the symbols still exist.</p>
+<p>The companion build articles show the Rockchip kernel default-branch setup: <a href="/posts/en/buildroot-from-zero/">Buildroot + RK3588</a> · <a href="/posts/en/yocto-from-zero/">Yocto + RK3588</a>.</p>
+</div>
+<div class="kb-section"><h2 id="debugging">9. Symptoms and a practical debug order</h2>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Check first</th>
+<th>Next step</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Symbol not found in the menu</td>
+<td>Spelling, source branch, parent menus, and dependencies</td>
+<td>Search with <code>/</code>; read the definition and full dependency chain</td>
+</tr>
+<tr>
+<td><code>.config</code> changes the option back to <code>n</code></td>
+<td><code>depends on</code>, architecture selection, Kconfig changes</td>
+<td>Run <code>olddefconfig</code>, diff before/after, and find the first unmet dependency</td>
+</tr>
+<tr>
+<td><code>select</code> causes missing symbols or type problems</td>
+<td>The selected symbol's own dependencies, prompt, and tristate value</td>
+<td>Fix the dependency model instead of forcing an incompatible combination</td>
+</tr>
+<tr>
+<td>Option is <code>y</code> but object was not built</td>
+<td><code>.config</code> used by this build, Makefile condition, and directory traversal</td>
+<td>Inspect <code>V=1</code> output and <code>obj-y</code> / <code>obj-m</code> conditions</td>
+</tr>
+<tr>
+<td>Driver compiles but device does not probe</td>
+<td>Whether the loaded DTB matches, compatible/status, and resources</td>
+<td>Check booted DTB, pinctrl/clocks/reset, and probe logs</td>
+</tr>
+<tr>
+<td>Saved config disappears in Yocto/Buildroot</td>
+<td>Whether it was saved in a versioned layer/defconfig</td>
+<td>Regenerate from the official build system and inspect the final config</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="kb-section"><h2 id="references">Source and documentation references</h2>
+<ul>
+<li><a href="https://github.com/rockchip-linux/kernel/tree/develop-6.1">Rockchip Linux kernel default repository and <code>develop-6.1</code> branch</a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/Documentation/kbuild/kconfig-language.rst">Kconfig language guide in the same source snapshot</a></li>
+<li><a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/sound/soc/rockchip/Kconfig">Rockchip kernel <code>sound/soc/rockchip/Kconfig</code></a> · <a href="https://github.com/rockchip-linux/kernel/blob/77168c8d5ab82399f65a80e9f807b50ba37cf483/arch/arm64/configs/rockchip_linux_defconfig">RK3588 kernel defconfig</a></li>
+<li><a href="https://docs.u-boot.org/en/latest/develop/kconfig.html">Official U-Boot Kconfig documentation</a> · <a href="https://github.com/rockchip-linux/u-boot/tree/next-dev">Rockchip U-Boot <code>next-dev</code></a> · <a href="https://github.com/rockchip-linux/u-boot/blob/1c535d65b8509f388d09e49fb6961f49fda35a1d/configs/rk3588_defconfig"><code>rk3588_defconfig</code></a></li>
+<li><a href="https://buildroot.org/downloads/manual/manual.html">Buildroot manual: kernel configuration</a> · <a href="https://docs.yoctoproject.org/6.0.2/kernel-dev/common.html">Yocto 6.0.2 Kernel Development Manual</a> · <a href="https://docs.yoctoproject.org/6.0.2/ref-manual/variables.html#term-SRCREV">Yocto Git source revision variables</a></li>
+</ul>
+<p>Related reading: <a href="/posts/en/buildroot-from-zero/">Buildroot from scratch</a> · <a href="/posts/en/yocto-from-zero/">Yocto from scratch</a> · <a href="/knowledge-base/en/">RK3588 hardware and driver knowledge base</a>.</p>
+</div></div></div></div></div></div>
+<div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <a href="/">yanruihe</a></div><div class="theme-info info-item">U-Boot / Linux Kconfig · RK3588 Embedded Linux</div></div></footer></div></div></main><script src="/js/i18n.js"></script></body></html>

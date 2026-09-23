@@ -110,6 +110,23 @@ Expected states are `enabled` and `active`. If not, inspect `INIT_MANAGER`, pack
 
 Record each repository commit, `MACHINE`, `DISTRO`, `INIT_MANAGER`, layer revisions, and image artifacts. Select a 6.0.2-compatible BSP for the target board and validate the bootloader, kernel configuration, device tree, partitions, console, networking, flashing, and rollback. Commit layers, recipes, and configuration; do not edit `tmp/work/` or deployed images as source. For build failures, inspect the relevant `temp/log.do_*`; for boot failures, inspect serial output, `systemctl status`, and `journalctl`.
 
+### RK3588: use the Rockchip kernel default branch
+
+The earlier `qemux86-64` image uses an x86_64 kernel and cannot simply be switched to the RK3588 ARM64 kernel. For RK3588, use a BSP layer and `MACHINE` that support the actual board, and have that BSP's kernel recipe fetch source from the [official Rockchip kernel repository](https://github.com/rockchip-linux/kernel). At the time this guide was checked, its default branch was [`develop-6.1`](https://github.com/rockchip-linux/kernel/tree/develop-6.1), at HEAD `77168c8d5ab82399f65a80e9f807b50ba37cf483`.
+
+In the BSP-provided kernel recipe or its `.bbappend`, the Git source is typically declared as follows. The exact recipe name, patches, defconfig, and DTB still depend on the selected BSP:
+
+```bitbake
+SRC_URI = "git://github.com/rockchip-linux/kernel.git;protocol=https;branch=develop-6.1"
+SRCREV = "77168c8d5ab82399f65a80e9f807b50ba37cf483"
+```
+
+When changing an existing recipe through a `.bbappend`, do not blindly replace its entire `SRC_URI` with this snippet. First check whether the BSP uses the original value to fetch patches, a defconfig, configuration fragments, or other files, then update the provider-specific source declaration while preserving those inputs.
+
+`branch=develop-6.1` selects the default branch explicitly; `SRCREV` pins the HEAD checked for this guide so the build can be reproduced. To intentionally follow the branch in a development build, `${AUTOREV}` is possible, but the build then changes when the remote branch moves and requires consideration of BitBake's remote lookup and cache behavior. Release builds should pin a verified full commit SHA and record the kernel, BSP-layer revisions, machine configuration, kernel fragments, and DTB together. Do not configure this ARM64 kernel for the article's x86 QEMU `MACHINE`.
+
+Use the Yocto kernel workflow to change configuration rather than keeping manual edits to `tmp/work/.../.config`: run `menuconfig` for the selected kernel in the correct build environment, capture only the intended changes with `diffconfig`/configuration fragments, and put those fragments in a product layer. Check the final `virtual/kernel` provider, `SRC_URI`, `SRCREV`, `KERNEL_DEVICETREE`, and machine before building and validating boot logs and driver enumeration on the RK3588 board. For Kconfig dependencies, defconfigs, and how drivers enter the build, see [Kconfig in U-Boot and the Linux kernel](/posts/en/kconfig-uboot-kernel/).
+
 ## 6. Understand BitBake tasks and build directories
 
 The argument to `bitbake core-image-minimal` is a recipe target, not a Linux kernel `make` target. BitBake parses the visible layers and configuration, then calculates task dependencies. A package build commonly includes tasks such as `do_fetch`, `do_unpack`, `do_patch`, `do_configure`, `do_compile`, `do_install`, and `do_package`. Tasks can run in parallel, and unchanged tasks can reuse `sstate-cache`. This is why the first build takes a long time while later changes often rebuild only affected tasks.

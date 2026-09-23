@@ -482,8 +482,29 @@ Buildroot release/tag/commit + BR2_EXTERNAL commit
 
 不要提交可重建的 `output/` 代替源码清单；也不要只保存一个开发者的 `.config`，却没有外部树、补丁、内核配置和工具链选择。发行前审阅 `make legal-info` 的警告与 package manifest，保存 `sha256sum output/images/*` 结果，并在 CI 中实际验证启动。Buildroot 能帮助组织组件来源和构建，不会自动提供安全 OTA、镜像签名、密钥托管、A/B 更新、回滚和漏洞响应流程；这些是产品架构的一部分，必须明确所有者与测试场景。
 
-参考：[Buildroot 官方手册](https://buildroot.org/downloads/manual/manual.html)、[2025.02 LTS 下载信息与维护版本](https://buildroot.org/download.html)、[QEMU direct Linux boot 说明](https://www.qemu.org/docs/master/system/linuxboot.html)、[QEMU 板级说明](https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt)、[Yocto 6.0.2 手动配置流程](https://docs.yoctoproject.org/6.0.2/dev-manual/poky-manual-setup.html)。本文使用维护中的 2025.02.18 LTS 作为可复现示例；其他 release 的 defconfig 和软件版本可能不同。延伸阅读：[PPSBBS 技术论坛原文](https://mp.weixin.qq.com/s/nGNtRB45EYnPZSHch7_56g)；本文重新组织和核对技术内容，不转载原文图表。
+## RK3588：让 Buildroot 使用 Rockchip kernel 默认分支
+
+本文前面的 `qemu_x86_64_defconfig` 是 x86_64 演示，不能拿 RK3588 的 ARM64 内核替换它再期待 QEMU x86 启动。迁移到 RK3588 时，使用板卡匹配的 ARM64 defconfig、DTS、Bootloader 和 BSP 配置；Linux 源码选择 [Rockchip kernel 官方仓库](https://github.com/rockchip-linux/kernel)当前默认分支。本文核对时默认分支为 [`develop-6.1`](https://github.com/rockchip-linux/kernel/tree/develop-6.1)，该分支当时的 HEAD 为 `77168c8d5ab82399f65a80e9f807b50ba37cf483`，分支可能继续前进。
+
+在 RK3588 产品的 Buildroot defconfig 中，内核来源可配置为：
+
+```make
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_GIT=y
+BR2_LINUX_KERNEL_CUSTOM_REPO_URL="https://github.com/rockchip-linux/kernel.git"
+BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION="develop-6.1"
+BR2_LINUX_KERNEL_USE_DEFCONFIG=y
+BR2_LINUX_KERNEL_DEFCONFIG="rockchip_linux"
+BR2_LINUX_KERNEL_DTS_SUPPORT=y
+BR2_LINUX_KERNEL_INTREE_DTS_NAME="rockchip/<board-dts-name-without-extension>"
+```
+
+`rockchip_linux` 对应该仓库 `arch/arm64/configs/rockchip_linux_defconfig`；DTS 值必须换成你实际板卡在 `arch/arm64/boot/dts/` 下的路径，不要照抄占位符。还要按板级 BSP 设置 toolchain、modules、内核镜像格式、设备树覆盖、Bootloader 和分区镜像，不能只改 kernel URL。Buildroot 的 `BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION` 支持 Git branch、tag 或 commit；如果使用 `develop-6.1`，两次构建之间默认分支内容可能变化。团队开发可跟随默认分支，但发版时应把解析出的 commit SHA 写入配置并保留工具链、defconfig、补丁与 DTS 一起评审。
+
+配置完成后，使用 `make linux-menuconfig` 检查选项，退出后以 `make linux-update-defconfig` 保存到受版本控制的板级配置；确认 `.config`、内核 defconfig、实际构建 commit 和 `output/images/` 里的内核/DTB 相互匹配。本文的 QEMU x86 示例与 RK3588 板级构建是两条不同的验证路径。
+
+参考：[Buildroot 官方手册](https://buildroot.org/downloads/manual/manual.html)、[2025.02 LTS 下载信息与维护版本](https://buildroot.org/download.html)、[QEMU direct Linux boot 说明](https://www.qemu.org/docs/master/system/linuxboot.html)、[QEMU 板级说明](https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt)、[Yocto 6.0.2 手动配置流程](https://docs.yoctoproject.org/6.0.2/dev-manual/poky-manual-setup.html)、[Rockchip kernel 默认分支](https://github.com/rockchip-linux/kernel)。本文使用维护中的 2025.02.18 LTS 作为可复现示例；其他 release 的 defconfig 和软件版本可能不同。延伸阅读：[PPSBBS 技术论坛原文](https://mp.weixin.qq.com/s/nGNtRB45EYnPZSHch7_56g) 与 [U-Boot/Linux Kconfig 核心机制](/posts/kconfig-uboot-kernel/)；本文重新组织和核对技术内容，不转载原文图表。
 
 ## 参考与下一篇
 
-[下一篇：Yocto 从零构建](/posts/yocto-from-zero/) · [知识库首页](/knowledge-base/)
+[下一篇：Yocto 从零构建](/posts/yocto-from-zero/) · [U-Boot 与 Linux 内核 Kconfig 核心机制](/posts/kconfig-uboot-kernel/) · [知识库首页](/knowledge-base/)

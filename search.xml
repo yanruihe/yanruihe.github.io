@@ -38,12 +38,17 @@
   <entry>
     <title>从零构建嵌入式 Linux：Buildroot</title>
     <url>/posts/buildroot-from-zero/</url>
-    <content><![CDATA[Buildroot 2025.02.18 LTS 从零构建交叉工具链、Linux 内核、根文件系统，在 QEMU 启动 BusyBox init，加入开机脚本并适配开发板。]]></content>
+    <content><![CDATA[Buildroot 2025.02.18 LTS 从零构建交叉工具链、Linux 内核、根文件系统，在 QEMU 启动 BusyBox init；RK3588 板级构建使用 rockchip-linux/kernel 默认分支 develop-6.1。]]></content>
   </entry>
   <entry>
     <title>从零构建嵌入式 Linux：Yocto</title>
     <url>/posts/yocto-from-zero/</url>
-    <content><![CDATA[Yocto Project 6.0.2 Wrynose 从零构建 qemux86-64 镜像，添加 meta-demo layer 和 systemd 服务并在 QEMU 验证。]]></content>
+    <content><![CDATA[Yocto Project 6.0.2 Wrynose 从零构建 qemux86-64 镜像，添加 meta-demo layer 和 systemd 服务并在 QEMU 验证；RK3588 BSP kernel 使用 rockchip-linux/kernel 默认分支 develop-6.1。]]></content>
+  </entry>
+  <entry>
+    <title>U-Boot 与 Linux 内核 Kconfig 核心机制</title>
+    <url>/posts/kconfig-uboot-kernel/</url>
+    <content><![CDATA[Kconfig 符号类型、depends on/select/imply、defconfig、menuconfig、生成配置、Kbuild 目标文件与 RK3588 U-Boot/Linux 实例。]]></content>
   </entry>
   <entry>
     <title>V4L2 源码深度解析：从 video_device 到 /dev/videoX</title>
@@ -88,12 +93,17 @@
   <entry>
     <title>Embedded Linux from scratch: Buildroot</title>
     <url>/posts/en/buildroot-from-zero/</url>
-    <content><![CDATA[Buildroot 2025.02.18 LTS toolchain, kernel, root filesystem, QEMU boot, BusyBox init, and hardware porting.]]></content>
+    <content><![CDATA[Buildroot 2025.02.18 LTS toolchain, kernel, root filesystem, QEMU boot and BusyBox init; the RK3588 board build uses the rockchip-linux/kernel default branch develop-6.1.]]></content>
   </entry>
   <entry>
     <title>Embedded Linux from scratch: Yocto</title>
     <url>/posts/en/yocto-from-zero/</url>
-    <content><![CDATA[Yocto Project 6.0.2 Wrynose qemux86-64 image, meta-demo layer, systemd service, QEMU, and hardware porting.]]></content>
+    <content><![CDATA[Yocto Project 6.0.2 Wrynose qemux86-64 image, meta-demo layer, systemd service, and QEMU; the RK3588 BSP kernel uses the rockchip-linux/kernel default branch develop-6.1.]]></content>
+  </entry>
+  <entry>
+    <title>Kconfig in U-Boot and the Linux kernel</title>
+    <url>/posts/en/kconfig-uboot-kernel/</url>
+    <content><![CDATA[Kconfig symbol types, depends on/select/imply, defconfigs, menuconfig, generated configuration, Kbuild objects, and RK3588 U-Boot/Linux examples.]]></content>
   </entry>
   <entry>
     <title>V4L2 Internals: The Lifecycle from video_device to /dev/videoX</title>

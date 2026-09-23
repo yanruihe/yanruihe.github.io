@@ -471,8 +471,29 @@ Buildroot release/tag/commit + BR2_EXTERNAL commit
 
 Do not version `output/` instead of the inputs, or keep only one developer's `.config` without the external tree, patches, kernel configuration, and toolchain choice. Before release, review `make legal-info` warnings and package manifests, save `sha256sum output/images/*`, and actually test the image in CI. Buildroot organizes component sources and builds; it does not automatically provide secure OTA, image signing, key custody, A/B updates, rollback, or vulnerability response. These are product architecture responsibilities that need owners and test cases.
 
-References: [Buildroot manual](https://buildroot.org/downloads/manual/manual.html), [2025.02 LTS releases and maintenance updates](https://buildroot.org/download.html), [QEMU direct Linux boot](https://www.qemu.org/docs/master/system/linuxboot.html), [QEMU board readme](https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt), and the [Yocto 6.0.2 manual setup](https://docs.yoctoproject.org/6.0.2/dev-manual/poky-manual-setup.html). This guide pins the maintained 2025.02.18 LTS for reproducible commands; defconfigs and package versions can differ across releases. Further reading: the [original PPSBBS article](https://mp.weixin.qq.com/s/nGNtRB45EYnPZSHch7_56g); this guide independently organizes and checks the technical material without reproducing its figures.
+## RK3588: use the Rockchip kernel default branch with Buildroot
+
+The earlier `qemu_x86_64_defconfig` example targets x86_64. Replacing its kernel with an RK3588 ARM64 kernel will not make it boot under x86 QEMU. For an RK3588 product, use the board-matched ARM64 defconfig, DTS, bootloader, and BSP settings, and select Linux from the current default branch of the [official Rockchip kernel repository](https://github.com/rockchip-linux/kernel). At the time this guide was checked, that default branch was [`develop-6.1`](https://github.com/rockchip-linux/kernel/tree/develop-6.1), at HEAD `77168c8d5ab82399f65a80e9f807b50ba37cf483`; the branch can advance.
+
+Configure the kernel source in the RK3588 product's Buildroot defconfig:
+
+```make
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_GIT=y
+BR2_LINUX_KERNEL_CUSTOM_REPO_URL="https://github.com/rockchip-linux/kernel.git"
+BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION="develop-6.1"
+BR2_LINUX_KERNEL_USE_DEFCONFIG=y
+BR2_LINUX_KERNEL_DEFCONFIG="rockchip_linux"
+BR2_LINUX_KERNEL_DTS_SUPPORT=y
+BR2_LINUX_KERNEL_INTREE_DTS_NAME="rockchip/<board-dts-name-without-extension>"
+```
+
+`rockchip_linux` maps to `arch/arm64/configs/rockchip_linux_defconfig` in that repository. Replace the DTS placeholder with the path for the actual board under `arch/arm64/boot/dts/`; do not copy the placeholder literally. Also configure the board BSP's toolchain, modules, kernel image format, device-tree overlays, bootloader, and partition image. Buildroot's `BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION` accepts a Git branch, tag, or commit. Following `develop-6.1` is convenient during development, but the branch may move between builds. A team can track the default branch while developing; for a release, record the resolved commit SHA alongside the toolchain, defconfig, patches, and DTS.
+
+After configuring, use `make linux-menuconfig` to inspect settings and `make linux-update-defconfig` to save the result into version control. Confirm the `.config`, kernel defconfig, actual source commit, and kernel/DTB under `output/images/` match. The QEMU x86 example and RK3588 board build are separate validation paths.
+
+References: [Buildroot manual](https://buildroot.org/downloads/manual/manual.html), [2025.02 LTS releases and maintenance updates](https://buildroot.org/download.html), [QEMU direct Linux boot](https://www.qemu.org/docs/master/system/linuxboot.html), [QEMU board readme](https://gitlab.com/buildroot.org/buildroot/-/raw/2025.02.18/board/qemu/x86_64/readme.txt), [Yocto 6.0.2 manual setup](https://docs.yoctoproject.org/6.0.2/dev-manual/poky-manual-setup.html), and the [Rockchip kernel default branch](https://github.com/rockchip-linux/kernel). This guide pins the maintained 2025.02.18 LTS for reproducible commands; defconfigs and package versions can differ across releases. Further reading: the [original PPSBBS article](https://mp.weixin.qq.com/s/nGNtRB45EYnPZSHch7_56g) and [U-Boot/Linux Kconfig mechanisms](/posts/en/kconfig-uboot-kernel/); the Buildroot material is independently organized and checked without reproducing the source article's figures.
 
 ## References and next article
 
-[Next: Yocto from scratch](/posts/en/yocto-from-zero/) · [Knowledge Base](/knowledge-base/en/)
+[Next: Yocto from scratch](/posts/en/yocto-from-zero/) · [U-Boot and Linux kernel Kconfig mechanisms](/posts/en/kconfig-uboot-kernel/) · [Knowledge Base](/knowledge-base/en/)
