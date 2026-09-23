@@ -40,6 +40,15 @@
 .kb-section {
   margin-top: 2.2rem;
 }
+.kb-topic-body > h2 {
+  margin-top: 2.2rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border-color);
+}
+.kb-topic-body > h3 {
+  margin-top: 1.5rem;
+  color: var(--text-color-2);
+}
 .kb-section h2 {
   padding-bottom: 0.35rem;
   border-bottom: 1px solid var(--border-color);

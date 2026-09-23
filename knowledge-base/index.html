@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-    <meta name="description" content="Git 与 Yocto 使用知识库">
+    <meta name="description" content="Git、Yocto 与 Linux 网络、音频、存储和内核调试知识库">
     <meta name="author" content="yanruihe">
     <title>知识库 | Rui&#39;s Blog</title>
     <link rel="stylesheet" href="/css/style.css">
@@ -55,13 +55,13 @@
               <div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div>
               <div class="info">
                 <div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div>
-                <div class="kb-meta">更新于 2026-09-23 · Git / Yocto / 嵌入式 Linux</div>
+                <div class="kb-meta">更新于 2026-09-24 · Git / Yocto / Linux 网络、音频、存储与内核</div>
               </div>
             </div>
             <div class="article-content keep-markdown-body">
               <div class="kb-lead">
                 <p>把零散的工程经验整理成可检索、可复用、可验证的知识。</p>
-                <p>本入口把 Git 协作与 Yocto 构建放在同一条工作流中：用 Git 管理变化，用 Yocto 验证系统产物。</p>
+                <p>从版本协作和系统构建，到硬件驱动与内核问题定位；每个专题都围绕可复现的操作、证据和验证展开。</p>
               </div>
               <div class="kb-card-grid">
                 <a class="kb-card" href="/knowledge-base/git/">
@@ -72,6 +72,15 @@
                   <h3>Yocto 使用知识库</h3>
                   <p>BitBake、Layer、Recipe、Image、devtool 和常见构建调试路径。</p>
                 </a>
+              </div>
+              <div class="kb-section">
+                <h2 id="linux-hardware">Linux 硬件与驱动专题</h2>
+                <div class="kb-card-grid">
+                  <a class="kb-card" href="/knowledge-base/ethernet-wifi/"><h3>以太网 PHY 与 Wi-Fi</h3><p>RGMII/SGMII 时序、Linux phylib、无线驱动分层与车载以太网 bring-up。</p></a>
+                  <a class="kb-card" href="/knowledge-base/audio/"><h3>ALSA、ASoC 与 CODEC</h3><p>PCM/I2S 音频链路、DAPM、电源时序、POP 噪声与 AEC 排查。</p></a>
+                  <a class="kb-card" href="/knowledge-base/storage/"><h3>eMMC、MTD 与文件系统</h3><p>区分块设备和原始闪存，理解 ext4、F2FS、UBI/UBIFS 的分层。</p></a>
+                  <a class="kb-card" href="/knowledge-base/kernel-debug/"><h3>内核内存与崩溃分析</h3><p>内存/DMA 生命周期、Oops 与 vmcore 分析，以及 I2C/SPI/UART 调试。</p></a>
+                </div>
               </div>
               <div class="kb-section">
                 <h2 id="from-zero">从零构建系列</h2>
@@ -116,8 +125,7 @@
                 <h2>源文档与参考</h2>
                 <p>知识库的 Markdown 源文档保存在仓库中，便于后续通过 Git 评审和扩展。</p>
                 <div class="kb-links">
-                  <a href="https://github.com/yanruihe/yanruihe.github.io/blob/main/knowledge-base/git.md" target="_blank" rel="noopener">Git 源文档</a>
-                  <a href="https://github.com/yanruihe/yanruihe.github.io/blob/main/knowledge-base/yocto.md" target="_blank" rel="noopener">Yocto 源文档</a>
+                  <a href="https://github.com/yanruihe/yanruihe.github.io/tree/main/knowledge-base" target="_blank" rel="noopener">知识库文档目录</a>
                   <a href="https://git-scm.com/docs" target="_blank" rel="noopener">Git 官方文档</a>
                   <a href="https://docs.yoctoproject.org/" target="_blank" rel="noopener">Yocto 官方文档</a>
                 </div>

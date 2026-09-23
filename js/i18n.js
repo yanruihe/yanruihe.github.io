@@ -4,6 +4,10 @@
   var translations = {
     'Yocto 使用知识库': 'Yocto Knowledge Base',
     'Git 知识库': 'Git Knowledge Base',
+    'Linux 以太网 PHY 与 Wi-Fi 调试': 'Linux Ethernet PHY and Wi-Fi Debugging',
+    'Linux 音频驱动：ALSA、ASoC 与 CODEC': 'Linux Audio Drivers: ALSA, ASoC, and CODECs',
+    'eMMC、MTD 与嵌入式 Linux 文件系统': 'eMMC, MTD, and Embedded Linux Filesystems',
+    'Linux 内核内存管理与崩溃分析': 'Linux Kernel Memory Management and Crash Analysis',
     '从零构建嵌入式 Linux：Buildroot': 'Embedded Linux from scratch: Buildroot',
     '从零构建嵌入式 Linux：Yocto': 'Embedded Linux from scratch: Yocto',
     'V4L2 源码深度解析：从 video_device 到 /dev/videoX': 'V4L2 Internals: The Lifecycle from video_device to /dev/videoX',
@@ -38,7 +42,7 @@
     '更新于': 'Updated',
     '搜索...': 'Search...',
     '知识库入口': 'Knowledge Base',
-    '集中查阅 Git 与 Yocto 知识，按专题、流程和验证记录快速定位。': 'Browse Git and Yocto knowledge by topic, workflow, and verification record.',
+    '从 Git 与 Yocto 到 Linux 网络、音频、存储和内核驱动，按专题与验证流程快速查阅。': 'Browse topics and verification workflows from Git and Yocto to Linux networking, audio, storage, and kernel drivers.',
     'Git 工作流、分支、提交和恢复': 'Git workflows, branches, commits, and recovery',
     'Yocto 构建、Layer、Recipe 和 devtool': 'Yocto builds, layers, recipes, and devtool',
     '进入知识库': 'Open Knowledge Base',
@@ -54,6 +58,10 @@
     '/knowledge-base/': '/knowledge-base/en/',
     '/knowledge-base/git/': '/knowledge-base/en/git/',
     '/knowledge-base/yocto/': '/knowledge-base/en/yocto/',
+    '/knowledge-base/ethernet-wifi/': '/knowledge-base/en/ethernet-wifi/',
+    '/knowledge-base/audio/': '/knowledge-base/en/audio/',
+    '/knowledge-base/storage/': '/knowledge-base/en/storage/',
+    '/knowledge-base/kernel-debug/': '/knowledge-base/en/kernel-debug/',
     '/posts/buildroot-from-zero/': '/posts/en/buildroot-from-zero/',
     '/posts/yocto-from-zero/': '/posts/en/yocto-from-zero/',
     '/posts/v4l2-video-device-lifecycle/': '/posts/en/v4l2-video-device-lifecycle/',
@@ -62,6 +70,10 @@
     '/knowledge-base/en/': '/knowledge-base/',
     '/knowledge-base/en/git/': '/knowledge-base/git/',
     '/knowledge-base/en/yocto/': '/knowledge-base/yocto/',
+    '/knowledge-base/en/ethernet-wifi/': '/knowledge-base/ethernet-wifi/',
+    '/knowledge-base/en/audio/': '/knowledge-base/audio/',
+    '/knowledge-base/en/storage/': '/knowledge-base/storage/',
+    '/knowledge-base/en/kernel-debug/': '/knowledge-base/kernel-debug/',
     '/posts/en/buildroot-from-zero/': '/posts/buildroot-from-zero/',
     '/posts/en/yocto-from-zero/': '/posts/yocto-from-zero/',
     '/posts/en/v4l2-video-device-lifecycle/': '/posts/v4l2-video-device-lifecycle/',
@@ -107,6 +119,10 @@
     } else {
       title = title.replace('Yocto Knowledge Base', 'Yocto 使用知识库')
         .replace('Git Knowledge Base', 'Git 知识库')
+        .replace('Linux Ethernet PHY and Wi-Fi Debugging', 'Linux 以太网 PHY 与 Wi-Fi 调试')
+        .replace('Linux Audio Drivers: ALSA, ASoC, and CODECs', 'Linux 音频驱动：ALSA、ASoC 与 CODEC')
+        .replace('eMMC, MTD, and Embedded Linux Filesystems', 'eMMC、MTD 与嵌入式 Linux 文件系统')
+        .replace('Linux Kernel Memory Management and Crash Analysis', 'Linux 内核内存管理与崩溃分析')
         .replace('Knowledge Base', '知识库');
     }
     document.title = title;

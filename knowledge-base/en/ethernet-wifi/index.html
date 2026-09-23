@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="description" content="RGMII, SGMII, wireless drivers, and automotive Ethernet debugging">
+  <meta name="author" content="yanruihe">
+  <title>Linux Ethernet PHY and Wi-Fi Debugging | Rui&#39;s Blog</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/knowledge-base.css">
+  <link rel="stylesheet" href="/css/i18n.css">
+  <link rel="shortcut icon" href="/images/logo.jpg">
+</head>
+<body>
+<main class="page-container"><div class="page-main-content">
+  <div class="page-main-content-top"><header class="header-wrapper"><div class="header-content">
+    <div class="left"><a class="logo-image" href="/"><img src="/images/logo.jpg" alt="Rui"></a><a class="logo-title" href="/">Rui&#39;s Blog</a></div>
+    <div class="right"><div class="pc"><ul class="menu-list"><li class="menu-item"><a href="/">Home</a></li><li class="menu-item"><a href="/archives">Archives</a></li><li class="menu-item"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="menu-item"><a href="/about">About</a></li></ul></div><div class="mobile"><div class="icon-item menu-bar"><div class="menu-bar-middle"></div></div></div></div>
+  </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
+  <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
+    <div class="article-title"><span class="title-hover-animation">Linux Ethernet PHY and Wi-Fi Debugging</span></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">Updated 2026-09-24 &#183; RGMII, SGMII, wireless drivers, and automotive Ethernet debugging</div></div></div>
+    <div class="article-content keep-markdown-body kb-topic-body">
+<div class="kb-lead"><p>This topic focuses on board-level network bring-up: start with the device-tree and MAC/PHY topology, then verify link, protocol, and userspace layers in order. RGMII and SGMII describe interfaces between a MAC and a PHY/PCS; they are not the cable-side Ethernet medium. Timing, clocks, reset, and the peer configuration must be checked together.</p></div>
+<h2 id="separate-the-data-paths">1. Separate the data paths</h2>
+<p>A wired path is broadly:</p>
+<pre class="kb-code"><code class="language-text">SoC MAC ↔ MAC-PHY interface (RGMII / SGMII, etc.) ↔ PHY ↔ magnetics/connector/cable ↔ peer
+                                  MDIO management bus ─┘
+</code></pre>
+<p>The MAC handles frame transmission, DMA, and the network interface. The PHY handles the physical layer and link negotiation; MDIO accesses its management registers. Linux phylib/phylink connects PHY state to the MAC driver. Wi-Fi devices commonly attach over PCIe, SDIO, USB, or a platform bus, and Linux drivers work with userspace connection managers through cfg80211/nl80211.</p>
+<h2 id="rgmii-and-sgmii-verify-both-ends">2. RGMII and SGMII: verify both ends</h2>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Item</th>
+<th>RGMII</th>
+<th>SGMII</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Connection</td>
+<td>Parallel data lines with a source-synchronous clock</td>
+<td>Single-lane serial SerDes link</td>
+</tr>
+<tr>
+<td>Board-level concerns</td>
+<td>Routing, sampling window, TX/RX clock delay</td>
+<td>SerDes/PCS setup, reference clock, polarity, negotiation mode</td>
+</tr>
+<tr>
+<td>Software checks</td>
+<td>Interface mode and delay ownership at MAC and PHY</td>
+<td>Both ends configured for SGMII and consistent PCS state</td>
+</tr>
+</tbody>
+</table>
+<p>RGMII modes such as <code>rgmii</code>, <code>rgmii-id</code>, <code>rgmii-rxid</code>, and <code>rgmii-txid</code> describe which side supplies receive/transmit clock delay from the PHY's perspective. Do not switch to an <code>*-id</code> mode just because a link is unstable. Check the schematic, data sheets, PCB routing, and PHY driver so delay is neither duplicated nor omitted. SGMII and 1000BASE-X should not be treated as interchangeable just because their line rates match; mismatched control-word/PCS semantics can leave a link apparently up while duplex or speed information is wrong.</p>
+<h2 id="board-bring-up-sequence">3. Board bring-up sequence</h2>
+<p>Capture boot logs, the device tree, and interface state before making changes. Work from the lower layers upward:</p>
+<pre class="kb-code"><code class="language-sh">dmesg | grep -Ei 'eth|mdio|phy|link|firmware'
+ip -details link show
+ethtool eth0
+ethtool -S eth0
+readlink /sys/class/net/eth0/phydev 2&gt;/dev/null
+</code></pre>
+<ol>
+<li>Hardware: power, reset timing, reference clock, strap pins, and MDIO/MDC levels. Confirm with instruments; a successful driver probe alone is not enough.</li>
+<li>Enumeration: verify device-tree <code>compatible</code>, <code>reg</code> (PHY address), <code>phy-mode</code>, clocks/reset GPIOs, and interrupt polarity against the schematic. Confirm MDIO returns the expected PHY ID.</li>
+<li>MAC-PHY link: inspect interface mode, PCS/SerDes state, autonegotiation, and speed/duplex at both ends. For RGMII, validate timing margin across temperature and voltage conditions.</li>
+<li>Network layer: only after link-up, check IP, ARP, routes, VLANs, firewall, and DHCP. Continuous ping and packet-loss/throughput tests help separate physical-link faults from network configuration.</li>
+</ol>
+<p>Do not hide a negotiation problem by forcing the speed, and do not treat an <code>ethtool -s</code> override as a fix. Record register/driver logs, temperature, cable, peer port, and workload before and after a change.</p>
+<h2 id="wi-fi-from-enumeration-to-connectivity">4. Wi-Fi: from enumeration to connectivity</h2>
+<p>A common stack is bus and power/clock → chip driver and firmware → cfg80211 (common configuration API) → mac80211 (used only by SoftMAC devices) or a FullMAC driver → nl80211 → <code>iw</code>, wpa_supplicant/NetworkManager → DHCP/IP. Not every Wi-Fi device uses mac80211; FullMAC firmware usually handles more 802.11 MAC work. The regulatory domain also constrains channels and transmission behavior.</p>
+<pre class="kb-code"><code class="language-sh">dmesg | grep -Ei 'wlan|wifi|firmware|cfg80211|mac80211'
+rfkill list
+iw phy
+iw dev
+iw dev wlan0 link
+iw dev wlan0 scan
+ip link show wlan0
+</code></pre>
+<ul>
+<li>No wireless interface: check SDIO/PCIe/USB enumeration, power/reset, kernel configuration, module dependencies, and firmware-load errors.</li>
+<li>Scanning works but association fails: check band/channel, regulatory domain, cipher suite, AP logs, authentication flow, and signal quality.</li>
+<li>Associated but offline: separate DHCP, gateway/DNS, routing, and firewall issues; <code>iw ... link</code> does not prove that an IP address was configured.</li>
+<li>Intermittent disconnects or poor throughput: collect RSSI, retries/loss, roaming, power-save, coexistence/interference, antenna, and RF-environment data with a fixed test location and peer.</li>
+</ul>
+<h2 id="automotive-ethernet-adds-constraints-to-phy-bring-up">5. Automotive Ethernet adds constraints to PHY bring-up</h2>
+<p>Automotive Ethernet is not complete just because a conventional Ethernet PHY is set to 100 Mbit/s or 1 Gbit/s. Identify the actual physical layer (for example 100BASE-T1 or 1000BASE-T1), PHY/switch, MAC/PCS, master/slave roles, harness/connector, and peer configuration. Follow the device data sheet and the applicable IEEE / OPEN Alliance specifications for link, interoperability, harness, and EMC validation. Linux-side concerns still include device tree, MDIO, phylib/phylink, PCS, time-synchronization needs, and observability; <code>ping</code> or a throughput test cannot replace conformance testing.</p>
+<h2 id="bring-up-record-template">6. Bring-up record template</h2>
+<p>Record the board/schematic revision, SoC and PHY/Wi-Fi part numbers, kernel and device-tree commits, PHY address/interface mode, power/clock/reset, firmware version, peer configuration, reproduction conditions, logs, and test results. State what was observed, what was ruled out, what changed, and how to revert it; avoid a bare “network works” conclusion.</p>
+<h2 id="official-references">Official references</h2>
+<ul>
+<li><a href="https://docs.kernel.org/networking/phy.html">Linux PHY Abstraction Layer</a></li>
+<li><a href="https://docs.kernel.org/networking/phy-link-topology.html">Linux PHY link topology</a></li>
+<li><a href="https://docs.kernel.org/driver-api/80211/cfg80211.html">cfg80211 subsystem</a></li>
+<li><a href="https://wireless.docs.kernel.org/en/latest/en/developers/documentation/mac80211.html">Linux Wireless: mac80211</a></li>
+</ul>
+
+    </div>
+  </div></div></div></div>
+  <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Powered by Hexo | Knowledge Base</div></div></footer></div>
+</div></main>
+<script src="/js/i18n.js"></script>
+</body>
+</html>

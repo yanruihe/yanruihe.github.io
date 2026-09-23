@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="description" content="PCM / I2S、CODEC、音质和回音问题的排查路径">
+  <meta name="author" content="yanruihe">
+  <title>Linux 音频驱动：ALSA、ASoC 与 CODEC | Rui&#39;s Blog</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/knowledge-base.css">
+  <link rel="stylesheet" href="/css/i18n.css">
+  <link rel="shortcut icon" href="/images/logo.jpg">
+</head>
+<body>
+<main class="page-container"><div class="page-main-content">
+  <div class="page-main-content-top"><header class="header-wrapper"><div class="header-content">
+    <div class="left"><a class="logo-image" href="/"><img src="/images/logo.jpg" alt="Rui"></a><a class="logo-title" href="/">Rui&#39;s Blog</a></div>
+    <div class="right"><div class="pc"><ul class="menu-list"><li class="menu-item"><a href="/">首页</a></li><li class="menu-item"><a href="/archives">归档</a></li><li class="menu-item"><a class="active" href="/knowledge-base/">知识库</a></li><li class="menu-item"><a href="/about">关于</a></li></ul></div><div class="mobile"><div class="icon-item menu-bar"><div class="menu-bar-middle"></div></div></div></div>
+  </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">首页</a></li><li class="drawer-menu-item flex-center"><a href="/archives">归档</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/">知识库</a></li><li class="drawer-menu-item flex-center"><a href="/about">关于</a></li></ul></div><div class="window-mask"></div></header></div>
+  <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
+    <div class="article-title"><span class="title-hover-animation">Linux 音频驱动：ALSA、ASoC 与 CODEC</span></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">更新于 2026-09-24 &#183; PCM / I2S、CODEC、音质和回音问题的排查路径</div></div></div>
+    <div class="article-content keep-markdown-body kb-topic-body">
+<div class="kb-lead"><p>本文从“数字音频为什么无声、失真、爆音”出发，建立可执行的排查路径。嵌入式音频不是只把 CODEC 驱动 probe 成功：CPU DAI、CODEC DAI、机器连接、时钟、DMA、DAPM 路径、模拟供电和用户态参数必须同时成立。</p></div>
+<h2 id="asoc">1. 播放链路与 ASoC 组件</h2>
+<pre class="kb-code"><code class="language-text">应用/aplay → ALSA PCM → DMA/platform → CPU DAI (I2S/PCM) ⇄ CODEC DAI → DAC/模拟输出/功放
+                                      Machine driver 描述板级连接与时钟/控制
+</code></pre>
+<ul>
+<li><strong>ALSA PCM</strong>：承接采样格式、采样率、声道、period/buffer 与播放/录音数据流。</li>
+<li><strong>CPU DAI</strong>：SoC 侧 I2S/PCM 接口和时钟/数据格式控制。</li>
+<li><strong>CODEC DAI/驱动</strong>：CODEC 的数字接口、寄存器控制、DAC/ADC、混音器和 DAPM 描述。</li>
+<li><strong>Machine driver</strong>：把 SoC、CODEC、板级功放/耳机检测等连接成声卡，并描述时钟与板级策略。</li>
+<li><strong>DMA/platform</strong>：搬运 PCM 数据；周期中断、FIFO 水位或总线带宽异常会造成 underrun/overrun。</li>
+</ul>
+<p>ASoC 的 DAPM 根据活动流和音频路由启停电源部件。Mixer 控件是否存在、路由图是否连通、widget 是否上电，都会决定声卡“看起来正常”但端点无声的现象。</p>
+<h2 id="bring-up">2. 首次 bring-up：从枚举到实际出声</h2>
+<pre class="kb-code"><code class="language-sh">dmesg | grep -Ei 'asoc|alsa|snd|codec|i2s|dma'
+cat /proc/asound/cards
+aplay -l
+arecord -l
+amixer -c 0 contents
+</code></pre>
+<p>确认内核配置、设备树的 sound card/link、I2S 控制器和 CODEC 地址/电源/reset、DAI 格式、主从时钟关系与采样率约束。再核对板级线路：扬声器功放使能脚、耳机插入检测、模拟电源、麦克风偏置和 mute GPIO。</p>
+<p>用 <code>speaker-test</code> 或 <code>aplay</code> 播放已知 PCM/WAV 测试信号；先选择声卡和 ALSA 控件，不要把测试文件格式不支持误判为驱动故障：</p>
+<pre class="kb-code"><code class="language-sh">aplay -D hw:0,0 -f S16_LE -r 48000 -c 2 test.wav
+arecord -D hw:0,0 -f S16_LE -r 48000 -c 2 -d 5 capture.wav
+</code></pre>
+<p>先确认硬件实际支持的格式和时钟。示例参数仅是常见测试配置，不代表所有板卡都支持 48 kHz、16-bit、双声道。</p>
+<h2 id="xrun">3. 无声、失真与 XRUN 的定位</h2>
+<table class="kb-table">
+<thead>
+<tr>
+<th>现象</th>
+<th>优先检查</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>找不到声卡/PCM</td>
+<td>驱动 probe、设备树 phandle、I2C/SPI CODEC 枚举、组件 defer probe、内核配置</td>
+</tr>
+<tr>
+<td>PCM 能启动但无声</td>
+<td><code>amixer</code> mute/音量、DAPM route、功放使能、模拟电源、DAC 路由、耳机/扬声器选择</td>
+</tr>
+<tr>
+<td>噪声、变调或失真</td>
+<td>MCLK/BCLK/LRCLK、主从关系、极性/slot/位宽、采样格式、左右声道映射、地线/模拟电源</td>
+</tr>
+<tr>
+<td><code>underrun</code> / <code>overrun</code></td>
+<td>DMA 配置与地址、period/buffer、IRQ 延迟、CPU 负载、总线带宽、音频路由格式</td>
+</tr>
+<tr>
+<td>录音全零</td>
+<td>麦克风 bias、输入 mux、ADC 电源、增益、时钟、物理输入和 <code>arecord</code> 参数</td>
+</tr>
+</tbody>
+</table>
+<p>示波器可直接观察 MCLK、BCLK、LRCLK 和串行数据；用逻辑分析仪核对协议时，采样时钟/位宽需足够。把软件控制值、波形、录音文件和听感关联起来，避免只凭耳朵猜寄存器。</p>
+<h2 id="popclick">4. POP/CLICK 与音质调优</h2>
+<p>爆音往往来自电源/偏置/模拟输出与数字静音的时序不协调，而不是单纯“把音量调小”。逐项验证：播放前 mute → 上电并稳定电源/参考时钟 → 配置 CODEC 与路由 → 按芯片建议等待偏置稳定 → 打开 DAC/功放并渐进解除 mute；停止时按相反顺序静音、关闭功放和电源。具体时序、延时、放电路径必须服从 CODEC/功放数据手册。ASoC 提供 DAPM 和 pop/click 管理机制，但板级电路与驱动实现仍决定效果。</p>
+<p>优化音质要固定设备、声源、输出负载和测量条件，再调整数字增益、模拟增益、滤波器、EQ、采样格式和动态处理。保留原始录音/回放，比较频响、底噪、THD+N、削波和延迟；未经测量不宜把主观听感作为唯一结论。</p>
+<h2 id="section">5. 回音消除：先确认系统架构</h2>
+<p>AEC（Acoustic Echo Cancellation）需要麦克风近端信号和扬声器播放参考信号，并依赖稳定的时戳、采样率、双工路由与延迟模型。它常由 DSP、音频 HAL 或用户态音频处理链实现，并非 CODEC 上一个通用开关就能解决。调试时记录播放参考与麦克风采样的时间对齐、设备/声学路径延迟、双讲场景、回声尾长和残余回声；先确认参考信号确实送到 AEC、录音路径确实经过 AEC，再评估算法参数和声学结构。</p>
+<h2 id="section-1">6. 验证清单</h2>
+<p>每次改动记录内核/设备树、CODEC 与功放版本、控件状态、DAI 格式/时钟、PCM 参数、波形、录音/回放样本及测试负载。覆盖冷启动、快速启停、耳机插拔、音量变化、休眠恢复、播放录音并发和高负载；分别验证功能、爆音、噪声、失真与延迟。</p>
+<h2 id="section-2">官方参考</h2>
+<ul>
+<li><a href="https://docs.kernel.org/sound/soc/overview.html">ALSA SoC Layer Overview</a></li>
+<li><a href="https://docs.kernel.org/sound/soc/index.html">ALSA SoC documentation index</a></li>
+<li><a href="https://docs.kernel.org/sound/kernel-api/alsa-driver-api.html">ALSA PCM API</a></li>
+</ul>
+
+    </div>
+  </div></div></div></div>
+  <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">由 Hexo 驱动 | 知识库页面</div></div></footer></div>
+</div></main>
+<script src="/js/i18n.js"></script>
+</body>
+</html>

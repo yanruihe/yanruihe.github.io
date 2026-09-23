@@ -3,7 +3,7 @@
   <entry>
     <title>知识库</title>
     <url>/knowledge-base/</url>
-    <content><![CDATA[Git 与 Yocto 使用知识库。整合方式：采集问题、最小复现、验证结果、Git 提交、站点发布。]]></content>
+    <content><![CDATA[Git、Yocto 与嵌入式 Linux 网络、音频、存储和内核调试知识库。采集问题、最小复现、验证结果、Git 提交、站点发布。]]></content>
   </entry>
   <entry>
     <title>Git 知识库</title>
@@ -14,6 +14,26 @@
     <title>Yocto 使用知识库</title>
     <url>/knowledge-base/yocto/</url>
     <content><![CDATA[Yocto Project、BitBake、Layer、Recipe、Machine、Image、devtool、构建调试、可复现发布。]]></content>
+  </entry>
+  <entry>
+    <title>Linux 以太网 PHY 与 Wi-Fi 调试</title>
+    <url>/knowledge-base/ethernet-wifi/</url>
+    <content><![CDATA[RGMII/SGMII 接口与时序、MDIO、phylib/phylink、Wi-Fi cfg80211/mac80211/固件、链路 bring-up 与车载 100BASE-T1/1000BASE-T1 调试。]]></content>
+  </entry>
+  <entry>
+    <title>Linux 音频驱动：ALSA、ASoC 与 CODEC</title>
+    <url>/knowledge-base/audio/</url>
+    <content><![CDATA[ALSA PCM、I2S/DAI、DMA、ASoC machine/platform/CODEC、DAPM、时钟、XRUN、POP/CLICK 噪声与声学回音消除 AEC。]]></content>
+  </entry>
+  <entry>
+    <title>eMMC、MTD 与嵌入式 Linux 文件系统</title>
+    <url>/knowledge-base/storage/</url>
+    <content><![CDATA[eMMC MMC host、EXT_CSD、块设备与 MTD raw NAND/NOR 的区别；ext4 日志、F2FS checkpoint、UBI 磨损均衡与 UBIFS。]]></content>
+  </entry>
+  <entry>
+    <title>Linux 内核内存管理与崩溃分析</title>
+    <url>/knowledge-base/kernel-debug/</url>
+    <content><![CDATA[kmalloc/vmalloc、DMA API、对象生命周期、Oops/panic/vmcore/kdump、KASAN/KFENCE/lockdep 与 I2C/SPI/UART 总线调试。]]></content>
   </entry>
   <entry>
     <title>从零构建嵌入式 Linux：Buildroot</title>
@@ -44,6 +64,26 @@
     <title>Yocto Knowledge Base</title>
     <url>/knowledge-base/en/yocto/</url>
     <content><![CDATA[Yocto Project, BitBake, layers, recipes, machines, images, devtool, build debugging, reproducibility, and release.]]></content>
+  </entry>
+  <entry>
+    <title>Linux Ethernet PHY and Wi-Fi Debugging</title>
+    <url>/knowledge-base/en/ethernet-wifi/</url>
+    <content><![CDATA[RGMII/SGMII interfaces and timing, MDIO, phylib/phylink, Wi-Fi cfg80211/mac80211/firmware, link bring-up, and automotive 100BASE-T1/1000BASE-T1 debugging.]]></content>
+  </entry>
+  <entry>
+    <title>Linux Audio Drivers: ALSA, ASoC, and CODECs</title>
+    <url>/knowledge-base/en/audio/</url>
+    <content><![CDATA[ALSA PCM, I2S/DAI, DMA, ASoC machine/platform/CODEC, DAPM, clocks, XRUNs, POP/CLICK noise, and acoustic echo cancellation (AEC).]]></content>
+  </entry>
+  <entry>
+    <title>eMMC, MTD, and Embedded Linux Filesystems</title>
+    <url>/knowledge-base/en/storage/</url>
+    <content><![CDATA[eMMC MMC host and EXT_CSD; block devices versus raw NAND/NOR MTD; ext4 journaling, F2FS checkpoints, UBI wear leveling, and UBIFS.]]></content>
+  </entry>
+  <entry>
+    <title>Linux Kernel Memory Management and Crash Analysis</title>
+    <url>/knowledge-base/en/kernel-debug/</url>
+    <content><![CDATA[kmalloc/vmalloc, DMA API, object lifetime, Oops/panic/vmcore/kdump, KASAN/KFENCE/lockdep, and I2C/SPI/UART bus debugging.]]></content>
   </entry>
   <entry>
     <title>Embedded Linux from scratch: Buildroot</title>

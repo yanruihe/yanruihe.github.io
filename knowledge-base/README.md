@@ -1,6 +1,6 @@
 # 知识库
 
-这是一套面向嵌入式 Linux 开发的可检索知识库，先把通用工作方法、Git 协作和 Yocto 构建串起来，再逐步沉淀具体项目经验。
+这是一套面向嵌入式 Linux 开发的可检索知识库，覆盖 Git/Yocto 工作流、板级网络/音频/存储 bring-up，以及内核内存和崩溃定位。
 
 ## 内容入口
 
@@ -8,6 +8,10 @@
 | --- | --- | --- |
 | Git | 如何保存变更、协作、回滚和发布 | [Git 知识库](git/) |
 | Yocto | 如何组织层、配方、镜像和调试流程 | [Yocto 使用知识库](yocto/) |
+| 以太网 PHY 与 Wi-Fi | RGMII/SGMII、无线驱动分层与车载以太网调试 | [网络专题](ethernet-wifi/) |
+| ALSA、ASoC 与 CODEC | PCM/I2S 链路、DAPM、音质、POP 与 AEC | [音频专题](audio/) |
+| eMMC、MTD 与文件系统 | 块设备/原始闪存差异及 ext4、F2FS、UBI/UBIFS | [存储专题](storage/) |
+| 内核内存与崩溃分析 | 内存/DMA 生命周期、panic 留证与低速总线调试 | [内核调试专题](kernel-debug/) |
 
 从零构建系列：[Buildroot 2025.02.18](../posts/buildroot-from-zero/) · [Yocto 6.0.2](../posts/yocto-from-zero/)。
 

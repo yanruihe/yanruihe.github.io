@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="description" content="Memory/DMA lifetime, crash evidence, and low-speed bus debugging">
+  <meta name="author" content="yanruihe">
+  <title>Linux Kernel Memory Management and Crash Analysis | Rui&#39;s Blog</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/knowledge-base.css">
+  <link rel="stylesheet" href="/css/i18n.css">
+  <link rel="shortcut icon" href="/images/logo.jpg">
+</head>
+<body>
+<main class="page-container"><div class="page-main-content">
+  <div class="page-main-content-top"><header class="header-wrapper"><div class="header-content">
+    <div class="left"><a class="logo-image" href="/"><img src="/images/logo.jpg" alt="Rui"></a><a class="logo-title" href="/">Rui&#39;s Blog</a></div>
+    <div class="right"><div class="pc"><ul class="menu-list"><li class="menu-item"><a href="/">Home</a></li><li class="menu-item"><a href="/archives">Archives</a></li><li class="menu-item"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="menu-item"><a href="/about">About</a></li></ul></div><div class="mobile"><div class="icon-item menu-bar"><div class="menu-bar-middle"></div></div></div></div>
+  </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
+  <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
+    <div class="article-title"><span class="title-hover-animation">Linux Kernel Memory Management and Crash Analysis</span></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">Updated 2026-09-24 &#183; Memory/DMA lifetime, crash evidence, and low-speed bus debugging</div></div></div>
+    <div class="article-content keep-markdown-body kb-topic-body">
+<div class="kb-lead"><p>The goal is not to memorize APIs. It is to build a path from symptoms and preserved evidence to object lifetime, concurrency, memory source, and hardware transactions. A driver panic often exposes an earlier out-of-bounds access, use-after-free, bad DMA address, or race only later.</p></div>
+<h2 id="memory-and-lifetime-concepts-in-drivers">1. Memory and lifetime concepts in drivers</h2>
+<ul>
+<li><strong>Page allocator / slab</strong>: page-sized allocations and caches of common smaller objects serve different sizes. <code>kmalloc</code>/<code>kzalloc</code> are commonly used for small physically contiguous kernel objects; <code>vmalloc</code> provides virtually contiguous memory backed by potentially non-contiguous physical pages. A CPU virtual address is not automatically a device DMA address.</li>
+<li><strong>DMA API</strong>: obtain DMA addresses according to the device DMA mask and mapping direction; distinguish coherent and streaming mappings and follow map/unmap/sync lifetimes. Do not use <code>virt_to_phys()</code> as a general DMA mapping method.</li>
+<li><strong>Allocation context</strong>: <code>GFP_KERNEL</code> may sleep. Interrupt/atomic contexts cannot use allocation paths that may block. Check lock ownership, calling context, and failure rollback.</li>
+<li><strong>Ownership</strong>: refcounts, completions, workqueues, timers, IRQs, and DMA callbacks can extend object lifetime. Remove/error paths must stop new requests, synchronize asynchronous users, release IRQ/DMA resources, and only then free the object.</li>
+<li><strong>Concurrency and locks</strong>: define who protects each field, lock ordering, and IRQ-context rules. Locking a pointer does not keep its object alive after an asynchronous callback exits.</li>
+</ul>
+<p>When reading code, draw resource pairs: <code>alloc ↔ free</code>, <code>map ↔ unmap</code>, <code>request_irq ↔ free_irq</code>, <code>submit ↔ complete/cancel</code>. Trace every error exit, deferred probe, remove, suspend, and resume through the state machine.</p>
+<h2 id="preserve-crash-evidence-before-interpreting-it">2. Preserve crash evidence before interpreting it</h2>
+<p>Before chasing an intermittent failure, confirm that serial/console logs and exact matching symbols are available. Release artifacts should preserve kernel configuration, source commit, unstripped <code>vmlinux</code>, <code>System.map</code>, module symbols, and build ID. Addresses and line numbers are trustworthy only when versions match exactly. When enabling pstore/ramoops or kdump, verify the boot chain, reserved memory, and storage path—not just that a config option is enabled.</p>
+<pre class="kb-code"><code class="language-text">Incident: full Oops/Panic, time, workload, temperature, trigger, peripheral state
+Artifacts: exact vmlinux, modules, System.map, .config, source commit/build ID
+Analysis: exception → PC/LR/registers → stack → first suspicious driver frame → lifetime/concurrency/DMA
+Validation: minimal reproduction → diagnostics/detectors → fix → original case and regression stress
+</code></pre>
+<p>For <code>BUG: unable to handle...</code>, <code>Oops</code>, or <code>panic</code>, first classify NULL/invalid address, permission fault, stack/overflow, deadlock, or hardware exception. Read the fault address, access direction, PC/LR, registers, and complete stack; correlate them with disassembly and the matching source. Then determine whether the top frame is only the victim, tracing the pointer's origin, last writer, asynchronous callback, and device timing.</p>
+<p>If a vmcore is available, use <code>crash</code> with the exact matching <code>vmlinux</code> to inspect tasks, stacks, modules, and memory. With only serial logs, retain the complete raw output instead of just the last few lines. Label unsupported conclusions as hypotheses and design experiments that could falsify them.</p>
+<h2 id="detectors-and-diagnostic-configurations">3. Detectors and diagnostic configurations</h2>
+<p>Choose tools in a development/test kernel according to the suspected class: KASAN detects out-of-bounds and use-after-free; KFENCE samples for memory errors at lower overhead; KCSAN finds some data races; lockdep checks lock dependencies; kmemleak helps identify possible leaks; UBSAN catches some undefined behavior. Instrumentation changes timing and resource usage, so a race may behave differently. Keep both an uninstrumented baseline and a detector build.</p>
+<p>Products should also have a crash-evidence strategy: serial/network console, pstore/ramoops, persistent logs, or kdump vmcore. Evaluate capacity, reserved memory, media wear, sensitive data, and reset policy. Do not enable automatic panic or intentionally trigger crashes on user devices merely to make a failure easier to reproduce.</p>
+<h2 id="low-speed-buses-software-logs-plus-electrical-evidence">4. Low-speed buses: software logs plus electrical evidence</h2>
+<h3 id="i2c">I2C</h3>
+<p>Check address convention (7-bit vs 10-bit), START/STOP, repeated START, ACK/NACK, pull-ups, rise time, bus frequency, arbitration/clock stretching, and device power-up timing. On Linux, distinguish adapter/controller errors, transfer errno, and chip-register responses. <code>i2cdetect</code> sends probe transactions to addresses; some devices should not be probed. Check the schematic and data sheet before scanning an active bus.</p>
+<h3 id="spi">SPI</h3>
+<p>Verify CPOL/CPHA, chip-select polarity, word length, maximum frequency, transfer direction, and transaction boundaries. Inspect CS/SCLK/MOSI/MISO with a logic analyzer. A successful controller transfer return does not prove that the device's sampling edge, register address, or timing requirements were met.</p>
+<h3 id="uart">UART</h3>
+<p>Check baud rate, data/parity/stop bits, TTL versus RS-232/RS-485 transceiver levels, TX/RX crossover, flow control, and interrupt/FIFO overruns. For garbled output, use a known USB-UART configuration and scope/logic analyzer to verify bit width and voltage before debugging clocks and pinmux; logs themselves can lose bytes to FIFO overrun.</p>
+<h2 id="analysis-exercise-intermittent-i2c-driver-panic">5. Analysis exercise: intermittent I2C-driver panic</h2>
+<ol>
+<li>Fix the board, firmware, bus speed, workload, temperature, and trigger rate; determine whether the fault consistently occurs at the same access.</li>
+<li>Preserve the full panic and build artifacts. Map symbols with <code>addr2line</code>/<code>crash</code> against the exact build; check whether the fault address came from a freed device object or an empty transfer buffer.</li>
+<li>Trace probe, IRQ, workqueue, remove, and error cleanup. Check whether the state object is freed before work/timer/IRQ cancellation completes, or whether code sleeps in a lock/atomic context.</li>
+<li>Use KASAN/KFENCE/lockdep and bus waveforms to test lifetime, lock-order, and device-timing hypotheses; change one variable at a time.</li>
+<li>After the fix, cover probe failure, hot removal (if supported), repeated suspend/resume, bus-error injection, and long stress runs; confirm there are no new leaks or warnings.</li>
+</ol>
+<h2 id="postmortem-template">6. Postmortem template</h2>
+<p>Keep the symptom and reproduction rate, raw crash log, hardware/software versions, matching symbols, suspected lifetime diagram, hypotheses ruled out, detector and measurement results, root-cause evidence, fix diff, regression tests, and remaining risk. Separate “what happened” from “why it happened”; the latter must be supported by evidence.</p>
+<h2 id="official-references">Official references</h2>
+<ul>
+<li><a href="https://docs.kernel.org/admin-guide/mm/">Linux Memory Management</a></li>
+<li><a href="https://docs.kernel.org/admin-guide/kdump/kdump.html">Kdump crash dump guide</a></li>
+<li><a href="https://docs.kernel.org/dev-tools/kasan.html">KASAN</a> · <a href="https://docs.kernel.org/dev-tools/kfence.html">KFENCE</a> · <a href="https://docs.kernel.org/dev-tools/testing-overview.html">Kernel testing tools</a></li>
+<li><a href="https://docs.kernel.org/driver-api/i2c.html">I2C subsystem</a> · <a href="https://docs.kernel.org/driver-api/spi.html">SPI subsystem</a> · <a href="https://docs.kernel.org/driver-api/serial/driver.html">Serial driver API</a></li>
+</ul>
+
+    </div>
+  </div></div></div></div>
+  <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Powered by Hexo | Knowledge Base</div></div></footer></div>
+</div></main>
+<script src="/js/i18n.js"></script>
+</body>
+</html>

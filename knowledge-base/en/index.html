@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-    <meta name="description" content="Git and Yocto knowledge base">
+    <meta name="description" content="Knowledge base for Git, Yocto, Linux networking, audio, storage, and kernel debugging">
     <meta name="author" content="yanruihe">
     <title>Knowledge Base | Rui&#39;s Blog</title>
     <link rel="stylesheet" href="/css/style.css">
@@ -19,10 +19,16 @@
   </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
   <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
     <div class="article-title"><span class="title-hover-animation">Knowledge Base</span></div>
-    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">Updated 2026-09-23 · Git / Yocto / Embedded Linux</div></div></div>
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Knowledge Base</span></div><div class="kb-meta">Updated 2026-09-24 · Git / Yocto / Linux networking, audio, storage, and kernel</div></div></div>
     <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>Turn scattered engineering experience into knowledge that is searchable, reusable, and verifiable.</p><p>This hub connects Git collaboration with Yocto builds: use Git to manage change and Yocto to verify system artifacts.</p></div>
+      <div class="kb-lead"><p>Turn scattered engineering experience into knowledge that is searchable, reusable, and verifiable.</p><p>From version collaboration and system builds to hardware drivers and kernel diagnosis, each topic focuses on reproducible steps, evidence, and verification.</p></div>
       <div class="kb-card-grid"><a class="kb-card" href="/knowledge-base/en/git/"><h3>Git Knowledge Base</h3><p>Worktrees, branches, commits, synchronization, recovery, and collaboration conventions for Yocto projects.</p></a><a class="kb-card" href="/knowledge-base/en/yocto/"><h3>Yocto Knowledge Base</h3><p>BitBake, layers, recipes, images, devtool, and common build-debugging paths.</p></a></div>
+      <div class="kb-section"><h2 id="linux-hardware">Linux hardware and driver topics</h2><div class="kb-card-grid">
+        <a class="kb-card" href="/knowledge-base/en/ethernet-wifi/"><h3>Ethernet PHY and Wi-Fi</h3><p>RGMII/SGMII timing, Linux phylib, wireless-driver layers, and automotive Ethernet bring-up.</p></a>
+        <a class="kb-card" href="/knowledge-base/en/audio/"><h3>ALSA, ASoC, and CODECs</h3><p>PCM/I2S paths, DAPM, power sequencing, pops, and AEC troubleshooting.</p></a>
+        <a class="kb-card" href="/knowledge-base/en/storage/"><h3>eMMC, MTD, and filesystems</h3><p>Block versus raw-flash devices and the layers behind ext4, F2FS, and UBI/UBIFS.</p></a>
+        <a class="kb-card" href="/knowledge-base/en/kernel-debug/"><h3>Kernel memory and crash analysis</h3><p>Memory/DMA lifetime, Oops and vmcore analysis, plus I2C/SPI/UART debugging.</p></a>
+      </div></div>
       <div class="kb-section"><h2 id="from-zero">From-zero build series</h2><p>Start with a reproducible QEMU build, boot and verify it, then move to real hardware.</p><div class="kb-card-grid"><a class="kb-card" href="/posts/en/buildroot-from-zero/"><h3>Buildroot: Embedded Linux from scratch</h3><p>2025.02.18 LTS · Toolchain, kernel, root filesystem, and BusyBox init.</p></a><a class="kb-card" href="/posts/en/yocto-from-zero/"><h3>Yocto: Embedded Linux from scratch</h3><p>6.0.2 · Layers, images, QEMU, and a systemd service.</p></a></div></div>
       <div class="kb-section"><h2 id="overview">How the topics fit together</h2><table class="kb-table"><thead><tr><th>Topic</th><th>What to record</th><th>When to use it</th></tr></thead><tbody><tr><td>Git</td><td>Change boundaries, history, collaboration, and recovery</td><td>Before editing, review, or rollback</td></tr><tr><td>Yocto</td><td>Layers, recipes, machines, images, and build logs</td><td>When adding software or adapting hardware</td></tr><tr><td>Project knowledge</td><td>Platform versions, verification, constraints, and artifacts</td><td>For handoff, reproduction, and release</td></tr></tbody></table></div>
       <div class="kb-section"><h2 id="workflow">Recommended loop</h2><ol><li>Record the context: target board, branch, machine configuration, image, and reproduction conditions.</li><li>Reduce it to a minimal reproduction with the necessary commands, configuration, and logs.</li><li>Verify and preserve the fix in a layer, recipe, or document, then commit it to Git.</li><li>Publish the knowledge with verification results, risks, and official references.</li></ol><pre class="kb-code"><code>Capture → Minimal reproduction → Verification → Git commit → Site publication</code></pre></div>
