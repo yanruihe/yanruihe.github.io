@@ -8,7 +8,7 @@
   <entry>
     <title>Git 知识库</title>
     <url>/knowledge-base/git/</url>
-    <content><![CDATA[Git 工作区、暂存区、本地仓库、远程仓库；分支、提交、rebase、revert、reflog，以及 Yocto 协作约定。]]></content>
+    <content><![CDATA[Git 分级教程与操作验证：工作区、暂存区、GitHub SSH 配置、首次提交、分支、merge/rebase、Alice/Bob 双人协作、多人同分支冲突、amend 仅改提交信息、force-with-lease 覆盖远程、作者与提交时间、restore/revert/reflog 恢复。]]></content>
   </entry>
   <entry>
     <title>Yocto 使用知识库</title>
@@ -63,7 +63,7 @@
   <entry>
     <title>Git Knowledge Base</title>
     <url>/knowledge-base/en/git/</url>
-    <content><![CDATA[Git working tree, staging area, local and remote repositories; branches, commits, rebase, revert, reflog, and Yocto collaboration.]]></content>
+    <content><![CDATA[Git tutorial with commands and verification: working tree, staging, GitHub SSH setup, first commit, branches, merge/rebase, Alice/Bob collaboration, shared-branch conflicts, message-only amend, force-with-lease, author and committer dates, restore/revert/reflog recovery.]]></content>
   </entry>
   <entry>
     <title>Yocto Knowledge Base</title>

@@ -80,6 +80,87 @@
   gap: 0.7rem;
   margin-top: 1rem;
 }
+
+.git-tutorial .git-toc {
+  margin: 1.6rem 0 2.2rem;
+  padding: 1rem 1.3rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.35rem;
+  background: var(--background-color-2);
+}
+.git-tutorial .git-toc summary {
+  cursor: pointer;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-color-2);
+}
+.git-tutorial .git-toc-list {
+  columns: 2;
+  column-gap: 2rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.git-tutorial .git-toc-list > li {
+  break-inside: avoid;
+  margin: 0 0 0.8rem;
+}
+.git-tutorial .git-toc-list > li > a {
+  font-weight: 600;
+}
+.git-tutorial .git-toc-list ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1rem;
+  list-style: none;
+  font-size: 0.92em;
+}
+.git-tutorial .git-toc-list li {
+  line-height: 1.8;
+}
+.git-tutorial h2[id],
+.git-tutorial h3[id] {
+  scroll-margin-top: 6rem;
+}
+.git-tutorial .kb-section h3 {
+  margin-top: 1.7rem;
+  color: var(--text-color-2);
+}
+.git-tutorial .git-command {
+  margin: 1.1rem 0 1.5rem;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 0.35rem;
+}
+.git-tutorial .git-command figcaption {
+  padding: 0.35rem 1rem;
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--text-color-4);
+  background: var(--background-color-2);
+  border-bottom: 1px solid var(--border-color);
+}
+.git-tutorial .git-command .kb-code {
+  margin: 0;
+  border-radius: 0;
+  line-height: 1.7;
+}
+.git-tutorial blockquote {
+  margin: 1.2rem 0;
+  padding: 0.5rem 1rem;
+  border-left: 0.25rem solid var(--primary-color);
+  background: var(--background-color-2);
+}
+.git-tutorial .kb-table td code {
+  white-space: pre;
+}
+@media (max-width: 700px) {
+  .git-tutorial .git-toc-list {
+    columns: 1;
+  }
+  .git-tutorial .git-toc {
+    padding: 0.9rem 1rem;
+  }
+}
 .kb-links a {
   padding: 0.45rem 0.8rem;
   background: var(--background-color-2);

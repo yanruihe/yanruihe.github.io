@@ -3,13 +3,16 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-    <meta name="description" content="Git branches, commits, synchronization, and recovery knowledge base">
+    <meta name="description" content="Git tutorial with a numbered contents list, SSH setup, commits, team demos, conflict resolution, and recovery">
     <meta name="author" content="yanruihe">
     <title>Git Knowledge Base | Rui&#39;s Blog</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/knowledge-base.css">
     <link rel="stylesheet" href="/css/i18n.css">
     <link rel="shortcut icon" href="/images/logo.jpg">
+<link rel="canonical" href="https://yanruihe.github.io/knowledge-base/en/git/">
+<link rel="alternate" hreflang="zh-CN" href="https://yanruihe.github.io/knowledge-base/git/">
+<link rel="alternate" hreflang="en" href="https://yanruihe.github.io/knowledge-base/en/git/">
 </head>
 <body>
 <main class="page-container"><div class="page-main-content">
@@ -19,132 +22,476 @@
   </div><div class="header-drawer"><ul class="drawer-menu-list"><li class="drawer-menu-item flex-center"><a href="/">Home</a></li><li class="drawer-menu-item flex-center"><a href="/archives">Archives</a></li><li class="drawer-menu-item flex-center"><a class="active" href="/knowledge-base/en/">Knowledge Base</a></li><li class="drawer-menu-item flex-center"><a href="/about">About</a></li></ul></div><div class="window-mask"></div></header></div>
   <div class="page-main-content-middle"><div class="main-content"><div class="post-page-container"><div class="article-content-container">
     <div class="article-title"><span class="title-hover-animation">Git Knowledge Base</span></div>
-    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Git</span></div><div class="kb-meta">Reusable workflows for branches, commits, synchronization, and recovery</div></div></div>
-    <div class="article-content keep-markdown-body">
-      <div class="kb-lead"><p>Confirm the state before changing it; make the change recoverable before cleaning anything up.</p><p>This page covers Git workflows, branch management, commit reviews, and version recovery. For hands-on practice, jump to the <a href="#team-demo">two-person demo</a> or <a href="#incidents">incident examples</a>.</p><p>New topics: <a href="#ssh">SSH setup</a> · <a href="#amend-message">message-only amend</a> · <a href="#shared-branch">shared branches</a> · <a href="#force-with-lease">remote replacement</a> · <a href="#dates">Git dates</a>.</p></div>
-      <div class="kb-section"><h2 id="model">1. How Git saves and uploads changes</h2><p>Suppose you edit <code>README.md</code>. The file is not automatically uploaded to GitHub. It moves through four steps:</p><ol><li><strong>Working tree</strong>: you edit the file on your computer; the change is not yet a Git commit.</li><li><strong>Staging area</strong>: <code>git add README.md</code> selects the content for the next commit.</li><li><strong>Local repository</strong>: <code>git commit -m &quot;docs: update README&quot;</code> records a commit on your computer.</li><li><strong>Remote repository</strong>: <code>git push</code> uploads the commit to GitHub.</li></ol><pre class="kb-code"><code>git status
-git add README.md
-git commit -m "docs: update README"
-git push</code></pre><p>Use <code>git status</code> to see what changed and what is staged. <code>git add</code> does not create a commit, and <code>git commit</code> does not upload it. For the first push of a new branch, use <code>git push -u origin HEAD</code>.</p></div>
-      <div class="kb-section"><h2 id="daily">2. Daily workflow</h2><pre class="kb-code"><code>git switch main
-git pull --ff-only origin main
-git switch -c feature/short-description
-
-git status
+    <div class="article-header"><div class="avatar"><img src="/images/avatar.jpg" alt="yanruihe"></div><div class="info"><div class="author"><span class="name">yanruihe</span><span class="author-label">Git</span></div><div class="kb-meta">Updated 2026-11-02 · SSH / commits / collaboration / recovery</div></div></div>
+    <div class="article-content keep-markdown-body git-tutorial">
+<div class="kb-lead"><p>Start with identity and SSH setup, then work through cloning, recording changes, reviewing branches, and synchronizing with teammates. Each example includes commands, their purpose, and a result to check.</p>
+<p>Git command blocks work in PowerShell or Bash. Scripts labeled PowerShell use PowerShell 7 on Windows. Replace <code>OWNER/REPO</code>, email addresses, branch names, and file names with your project values. Read each section's prerequisites before running its commands.</p>
+</div>
+<details class="git-toc" open><summary>Contents</summary><nav aria-label="Contents"><ul class="git-toc-list"><li><a href="#model">1 How Git records changes</a><ul><li><a href="#git-1-1">1.1 Four locations involved in a change</a></li><li><a href="#git-1-2">1.2 Inspect status and differences</a></li></ul></li><li><a href="#ssh">2 Git environment and GitHub SSH setup</a><ul><li><a href="#git-2-1">2.1 Check Git and your commit identity</a></li><li><a href="#git-2-2">2.2 Generate a key and add the public key</a></li><li><a href="#git-2-3">2.3 Test authentication and configure the remote</a></li><li><a href="#git-2-4">2.4 Use separate keys for multiple accounts</a></li></ul></li><li><a href="#daily">3 From cloning to the first push</a><ul><li><a href="#git-3-1">3.1 Clone and create a working branch</a></li><li><a href="#git-3-2">3.2 Edit a file and record a commit</a></li><li><a href="#git-3-3">3.3 Push the branch and request review</a></li></ul></li><li><a href="#branch">4 Branch merging and rebasing</a><ul><li><a href="#git-4-1">4.1 Inspect branches and commit relationships</a></li><li><a href="#git-4-2">4.2 Choose merge or rebase</a></li><li><a href="#git-4-3">4.3 Continue or abort an interrupted operation</a></li></ul></li><li><a href="#examples">5 Selective commits and review</a><ul><li><a href="#git-5-1">5.1 Commit only the documentation</a></li><li><a href="#git-5-2">5.2 Stage hunks and unstage a file</a></li><li><a href="#review">5.3 Commit and review conventions</a></li></ul></li><li><a href="#team-demo">6 Two-person collaboration demo</a><ul><li><a href="#git-6-1">6.1 Create the remote and two clones</a></li><li><a href="#git-6-2">6.2 Alice pushes a feature branch</a></li><li><a href="#git-6-3">6.3 Bob merges and Alice synchronizes</a></li></ul></li><li><a href="#shared-branch">7 Shared branches and conflict resolution</a><ul><li><a href="#git-7-1">7.1 Inspect both sides after a rejected push</a></li><li><a href="#git-7-2">7.2 Resolve edits to the same line</a></li></ul></li><li><a href="#amend-message">8 Change commit messages</a><ul><li><a href="#git-8-1">8.1 Change only the last commit message</a></li><li><a href="#git-8-2">8.2 Edit earlier commit messages</a></li></ul></li><li><a href="#force-with-lease">9 Replace a remote branch</a><ul><li><a href="#git-9-1">9.1 Record the remote commit to be replaced</a></li><li><a href="#git-9-2">9.2 Push with an explicit expected commit</a></li></ul></li><li><a href="#dates">10 Inspect and change Git dates</a><ul><li><a href="#git-10-1">10.1 How the three timestamps differ</a></li><li><a href="#git-10-2">10.2 Change the last unpublished commit dates</a></li><li><a href="#git-10-3">10.3 Adjust dates across several commits</a></li></ul></li><li><a href="#recover">11 Undo changes and recover versions</a><ul><li><a href="#git-11-1">11.1 Choose a command for the location of the change</a></li><li><a href="#git-11-2">11.2 Revert a published commit</a></li></ul></li><li><a href="#incidents">12 Common problems and incident examples</a><ul><li><a href="#git-12-1">12.1 Recover a lost local commit</a></li><li><a href="#git-12-2">12.2 Handle a committed credential</a></li></ul></li><li><a href="#references">13 References</a></li></ul></nav></details>
+<section class="kb-section"><h2 id="model">1 How Git records changes</h2>
+<h3 id="git-1-1">1.1 Four locations involved in a change</h3>
+<p>After editing <code>README.md</code>, use <code>git add</code> to select its content, <code>git commit</code> to record a local snapshot, and <code>git push</code> to upload commits.</p>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Location</th>
+<th>What it holds</th>
+<th>Common operations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Working tree</td>
+<td>Files you are editing</td>
+<td>Editor, <code>git diff</code></td>
+</tr>
+<tr>
+<td>Staging area</td>
+<td>Content selected for the next commit</td>
+<td><code>git add</code>, <code>git diff --cached</code></td>
+</tr>
+<tr>
+<td>Local repository</td>
+<td>Commits, branches, and tags</td>
+<td><code>git commit</code>, <code>git log</code></td>
+</tr>
+<tr>
+<td>Remote repository</td>
+<td>Shared commits and branches</td>
+<td><code>git fetch</code>, <code>git push</code></td>
+</tr>
+</tbody>
+</table>
+<figure class="git-command"><figcaption>Text</figcaption><pre class="kb-code"><code class="language-text">Edit files → git add → staging area → git commit → local commit → git push → remote branch
+</code></pre></figure>
+<p>Edits made after staging remain in the working tree until staged again. A local commit reaches the remote only after a push.</p>
+<h3 id="git-1-2">1.2 Inspect status and differences</h3>
+<p>From the project directory, run:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git status -sb
 git diff
-git diff --check
-git add -p
-git commit -m "docs: update git notes"
-
-git fetch origin
-git rebase origin/main
-git push -u origin HEAD</code></pre><p>Small commits are easier to review and revert. Use prefixes such as <code>docs:</code>, <code>feat:</code>, <code>fix:</code>, and <code>build:</code>; describe the result rather than only the action.</p></div>
-      <div class="kb-section"><h2 id="branch">3. Branching, merging, and rebasing</h2><ul><li>Use short-lived branches for features or knowledge topics, such as <code>feature/logging</code>.</li><li>Rebase local, unpublished commits when you need to tidy the history.</li><li>Do not rewrite commits that others already depend on; add a corrective commit instead.</li><li>Before merging, make sure the worktree is clean and read the complete diff.</li></ul><pre class="kb-code"><code>git log --oneline --decorate --graph -20
+git diff --cached
+</code></pre></figure>
+<p><code>git diff</code> shows unstaged changes. <code>git diff --cached</code> compares staged content with the current commit. In the short status output, the first file-status column describes the index and the second describes the working tree.</p>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Status example</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code> M README.md</code></td>
+<td>Modified in the working tree, not staged</td>
+</tr>
+<tr>
+<td><code>M  README.md</code></td>
+<td>Modification is staged</td>
+</tr>
+<tr>
+<td><code>MM README.md</code></td>
+<td>Staged, then edited again</td>
+</tr>
+<tr>
+<td><code>?? notes.txt</code></td>
+<td>Untracked file</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section class="kb-section"><h2 id="ssh">2 Git environment and GitHub SSH setup</h2>
+<h3 id="git-2-1">2.1 Check Git and your commit identity</h3>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git --version
+git config --global user.name &quot;Your Name&quot;
+git config --global user.email &quot;you@example.com&quot;
+git config --get user.name
+git config --get user.email
+</code></pre></figure>
+<p>The name and email become part of your commits. To use a different identity for one repository, configure it inside that repository without <code>--global</code>. Confirm that the displayed identity matches the project.</p>
+<h3 id="git-2-2">2.2 Generate a key and add the public key</h3>
+<p>First inspect existing public keys in PowerShell:</p>
+<figure class="git-command"><figcaption>PowerShell</figcaption><pre class="kb-code"><code class="language-powershell">$sshDir = Join-Path $env:USERPROFILE &quot;.ssh&quot;
+Get-ChildItem $sshDir -Filter &quot;*.pub&quot; -ErrorAction SilentlyContinue
+</code></pre></figure>
+<p>Reuse an appropriate existing key, or create a new key with its own filename:</p>
+<figure class="git-command"><figcaption>PowerShell</figcaption><pre class="kb-code"><code class="language-powershell">New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+$keyFile = Join-Path $sshDir &quot;id_ed25519_github&quot;
+if (Test-Path $keyFile) { throw &quot;Key already exists; reuse it or choose another filename.&quot; }
+ssh-keygen -t ed25519 -C &quot;you@example.com&quot; -f $keyFile
+Get-Content &quot;$keyFile.pub&quot;
+</code></pre></figure>
+<p>Choose a passphrase when prompted. Add the public-key output under GitHub <strong>Settings → SSH and GPG keys → New SSH key</strong>. Keep the file without the <code>.pub</code> suffix private.</p>
+<h3 id="git-2-3">2.3 Test authentication and configure the remote</h3>
+<p>Before accepting a new host, compare its fingerprint with <a href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints">GitHub's published fingerprints</a>. Test the custom key:</p>
+<figure class="git-command"><figcaption>PowerShell</figcaption><pre class="kb-code"><code class="language-powershell">ssh -T -i $keyFile -o IdentitiesOnly=yes git@github.com
+</code></pre></figure>
+<p>A successful response identifies the authenticated account and says that shell access is unavailable. The test can exit with status <code>1</code> even after successful authentication; read the response.</p>
+<p>To select this key for later Git connections, add the following to <code>$sshDir/config</code>:</p>
+<figure class="git-command"><figcaption>SSH config</figcaption><pre class="kb-code"><code class="language-sshconfig">Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_github
+  IdentitiesOnly yes
+</code></pre></figure>
+<p>Inside an existing repository, inspect and update the remote:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git remote -v
+git remote set-url origin git@github.com:OWNER/REPO.git
+git remote -v
+</code></pre></figure>
+<p>Expected result: both fetch and push URLs for <code>origin</code> point to the intended repository. Changing a URL does not upload files.</p>
+<h3 id="git-2-4">2.4 Use separate keys for multiple accounts</h3>
+<p>Add an alias for a work account to SSH config:</p>
+<figure class="git-command"><figcaption>SSH config</figcaption><pre class="kb-code"><code class="language-sshconfig">Host github-work
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_work
+  IdentitiesOnly yes
+</code></pre></figure>
+<p>Use <code>git@github-work:TEAM/REPO.git</code> for that account's remote, and test with <code>ssh -T git@github-work</code>. The alias selects the SSH identity; <code>user.name</code> and <code>user.email</code> still control commit identity.</p>
+</section>
+<section class="kb-section"><h2 id="daily">3 From cloning to the first push</h2>
+<h3 id="git-3-1">3.1 Clone and create a working branch</h3>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git clone git@github.com:OWNER/REPO.git
+cd REPO
+git switch main
+git pull --ff-only origin main
+git switch -c feature/quick-note
+</code></pre></figure>
+<p><code>clone</code> creates a local copy. <code>pull --ff-only</code> accepts only a fast-forward update. <code>switch -c</code> creates a branch from the current commit and switches to it. Replace <code>main</code> if the project uses another main-branch name.</p>
+<p>Check the branch:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git branch --show-current
+git status -sb
+</code></pre></figure>
+<p>Expected result: <code>feature/quick-note</code>. If the fast-forward pull is rejected, inspect the divergence and choose a merge or rebase as described in section 4.</p>
+<h3 id="git-3-2">3.2 Edit a file and record a commit</h3>
+<p>Edit and save <code>README.md</code> in your editor, then run:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git diff -- README.md
+git add README.md
+git diff --cached
+git diff --cached --check
+git commit -m &quot;docs: update README&quot;
+</code></pre></figure>
+<p>Review the diff before staging the intended file. <code>--check</code> checks the diff for whitespace errors and conflict markers. The staged diff shows the content that the commit will record.</p>
+<p>Verify the result:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git log -1 --oneline
+git status -sb
+</code></pre></figure>
+<p>The new commit should appear in the log, and its recorded changes should disappear from the status list.</p>
+<h3 id="git-3-3">3.3 Push the branch and request review</h3>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git push -u origin HEAD
+git branch -vv
+</code></pre></figure>
+<p><code>HEAD</code> refers to the current branch; <code>-u</code> sets its upstream. Confirm that <code>git branch -vv</code> shows <code>origin/feature/quick-note</code>, then open a pull request describing the purpose and verification results.</p>
+</section>
+<section class="kb-section"><h2 id="branch">4 Branch merging and rebasing</h2>
+<h3 id="git-4-1">4.1 Inspect branches and commit relationships</h3>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git fetch origin
+git branch -a
+git log --oneline --decorate --graph -20
 git diff origin/main...HEAD
-git diff --name-only origin/main...HEAD</code></pre></div>
-      <div class="kb-section"><h2 id="recover">4. Safe undo and recovery</h2><pre class="kb-code"><code># Cancel an uncommitted working-tree change
-git restore -- path/to/file
-
-# Unstage a file while keeping the working-tree change
-git restore --staged -- path/to/file
-
-# Revert a published commit with a new inverse commit
-git revert &lt;commit&gt;
-
-# Find lost commits or branch pointers
-git reflog</code></pre><p><code>reset --hard</code> discards working-tree content. For shared branches, prefer <code>revert</code> when correcting history.</p></div>
-      <div class="kb-section"><h2 id="review">5. Commit and review conventions</h2><ul><li>Keep each commit focused on one logical change so it is easy to understand, review, and revert.</li><li>Use a short prefix for the type and scope, for example <code>docs(git): clarify restore examples</code>.</li><li>Review the complete diff and check for secrets, temporary files, or unrelated changes before committing.</li><li>Record review feedback and verification results before merging; add a clear follow-up commit when changes are needed.</li></ul></div>
-      <div class="kb-section"><h2 id="examples">6. Practical example: commit only the intended change</h2><p>Suppose <code>README.md</code> and a local configuration file have changed, but only the documentation belongs in this commit:</p><pre class="kb-code"><code>git status -sb
+</code></pre></figure>
+<p><code>fetch</code> updates remote-tracking information without merging it into your current branch. The three-dot diff starts at the common ancestor and is useful for reviewing changes introduced by your branch.</p>
+<h3 id="git-4-2">4.2 Choose merge or rebase</h3>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Operation</th>
+<th>Effect on history</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>merge</code></td>
+<td>Preserves existing commits and may add a merge commit</td>
+<td>Integrating a branch already shared with others</td>
+</tr>
+<tr>
+<td><code>rebase</code></td>
+<td>Replays commits on a new base, usually producing new IDs</td>
+<td>Tidying your own unpublished commits</td>
+</tr>
+</tbody>
+</table>
+<p>Merge the latest main branch into the current feature branch:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git fetch origin
+git merge origin/main
+</code></pre></figure>
+<p>For a branch containing only your own unpublished commits, another option is:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git fetch origin
+git rebase origin/main
+</code></pre></figure>
+<p>Afterward, review the commit graph and complete diff, then run the project's checks. Coordinate history changes if teammates have already built on those commits.</p>
+<h3 id="git-4-3">4.3 Continue or abort an interrupted operation</h3>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Operation</th>
+<th>After resolving conflicts</th>
+<th>To abandon the operation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>merge</td>
+<td><code>git add</code>, then <code>git commit</code></td>
+<td><code>git merge --abort</code></td>
+</tr>
+<tr>
+<td>rebase</td>
+<td><code>git add</code>, then <code>git rebase --continue</code></td>
+<td><code>git rebase --abort</code></td>
+</tr>
+</tbody>
+</table>
+<p>Save and handle existing edits before starting a merge or rebase. The abort commands exit an operation currently in progress.</p>
+</section>
+<section class="kb-section"><h2 id="examples">5 Selective commits and review</h2>
+<h3 id="git-5-1">5.1 Commit only the documentation</h3>
+<p>Scenario: <code>README.md</code> and a local configuration file have changed, but this commit should include only the documentation.</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git status -sb
 git diff -- README.md
 git add README.md
 git diff --cached
 git diff --cached --check
-git commit -m "docs: clarify setup steps"</code></pre><p>If you staged the wrong file, run <code>git restore --staged -- README.md</code>; the working-tree edit remains. Use <code>git add -p</code> to select individual hunks.</p></div>
-      <div class="kb-section"><h2 id="team-demo">7. Two-person collaboration demo: branch, review, merge, sync</h2><p>Run this in PowerShell. It creates a temporary bare remote and two independent clones for Alice and Bob, leaving real repositories untouched.</p>
-        <h3>7.1 Create a temporary remote and two clones</h3>
-        <pre class="kb-code"><code>$demoRoot = Join-Path $env:TEMP ("git-team-demo-" + [guid]::NewGuid().ToString("N"))
-$remote = Join-Path $demoRoot "remote.git"
-$alice = Join-Path $demoRoot "alice"
-$bob = Join-Path $demoRoot "bob"
+git commit -m &quot;docs: clarify setup steps&quot;
+</code></pre></figure>
+<p>Expected result: the commit contains the README change, while the local configuration edit remains in the working tree.</p>
+<h3 id="git-5-2">5.2 Stage hunks and unstage a file</h3>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git add -p
+git diff --cached
+git restore --staged -- README.md
+</code></pre></figure>
+<p><code>add -p</code> lets you select individual hunks. <code>restore --staged</code> removes the file from the staging area while preserving working-tree edits; you can then stage the intended parts again.</p>
+<h3 id="review">5.3 Commit and review conventions</h3>
+<p>Keep each commit focused on one logical change, with a clear message such as <code>docs(git): clarify restore examples</code>. Review the complete diff for temporary files, account information, and unrelated changes. Record checks and review conclusions before merging. Small commits make problems easier to locate and revert.</p>
+</section>
+<section class="kb-section"><h2 id="team-demo">6 Two-person collaboration demo</h2>
+<p>This PowerShell example creates a temporary bare remote and independent clones for Alice and Bob. <code>git -C</code> chooses the repository in which each command runs, so both roles can be demonstrated in one terminal.</p>
+<h3 id="git-6-1">6.1 Create the remote and two clones</h3>
+<figure class="git-command"><figcaption>PowerShell</figcaption><pre class="kb-code"><code class="language-powershell">$demoRoot = Join-Path $env:TEMP (&quot;git-team-demo-&quot; + [guid]::NewGuid().ToString(&quot;N&quot;))
+$remote = Join-Path $demoRoot &quot;remote.git&quot;
+$alice = Join-Path $demoRoot &quot;alice&quot;
+$bob = Join-Path $demoRoot &quot;bob&quot;
 New-Item -ItemType Directory -Path $demoRoot | Out-Null
 git init --bare $remote
 git --git-dir=$remote symbolic-ref HEAD refs/heads/main
 git clone $remote $alice
 git -C $alice config user.name Alice
 git -C $alice config user.email alice@example.test
-Set-Content (Join-Path $alice "README.md") "Team notes"
+Set-Content (Join-Path $alice &quot;README.md&quot;) &quot;Team notes&quot;
 git -C $alice add README.md
-git -C $alice commit -m "docs: start team notes"
+git -C $alice commit -m &quot;docs: start team notes&quot;
 git -C $alice push -u origin main
 git clone $remote $bob
 git -C $bob config user.name Bob
-git -C $bob config user.email bob@example.test</code></pre>
-        <h3>7.2 Alice proposes a branch; Bob reviews and merges</h3>
-        <pre class="kb-code"><code>git -C $alice switch -c docs/add-workflow
-Add-Content (Join-Path $alice "README.md") "Review changes before merging."
+git -C $bob config user.email bob@example.test
+</code></pre></figure>
+<p><code>--bare</code> creates a repository for sharing commits without an editable working tree. Cloning the empty repository produces a notice. Bob clones only after Alice has pushed the initial <code>main</code> commit.</p>
+<h3 id="git-6-2">6.2 Alice pushes a feature branch</h3>
+<figure class="git-command"><figcaption>PowerShell</figcaption><pre class="kb-code"><code class="language-powershell">git -C $alice switch -c docs/add-workflow
+Add-Content (Join-Path $alice &quot;README.md&quot;) &quot;Review changes before merging.&quot;
 git -C $alice add README.md
-git -C $alice commit -m "docs: add review workflow"
+git -C $alice commit -m &quot;docs: add review workflow&quot;
 git -C $alice push -u origin docs/add-workflow
-
-git -C $bob fetch origin
+</code></pre></figure>
+<p>Expected result: the remote has a new <code>docs/add-workflow</code> branch, while <code>main</code> remains unchanged.</p>
+<h3 id="git-6-3">6.3 Bob merges and Alice synchronizes</h3>
+<figure class="git-command"><figcaption>PowerShell</figcaption><pre class="kb-code"><code class="language-powershell">git -C $bob fetch origin
 git -C $bob diff origin/main...origin/docs/add-workflow
 git -C $bob log --oneline origin/main..origin/docs/add-workflow
 git -C $bob switch main
-git -C $bob merge --no-ff origin/docs/add-workflow -m "merge: add review workflow"
+git -C $bob merge --no-ff origin/docs/add-workflow -m &quot;merge: add review workflow&quot;
 git -C $bob push origin main
 
 git -C $alice switch main
 git -C $alice pull --ff-only origin main
-git -C $alice log --oneline --graph -4</code></pre>
-        <p>Expected result: Bob sees Alice's one-line addition in the diff; after the merge, Alice's <code>main</code> fast-forwards to the latest version. In a real GitHub team, Alice opens a pull request and Bob reviews and merges it in the UI rather than pushing directly to a protected <code>main</code> branch.</p><p>The repository also provides a <a href="https://github.com/yanruihe/yanruihe.github.io/blob/main/knowledge-base/examples/git/team-demo.ps1">PowerShell demo script</a> that verifies the result and leaves the temporary directory available for inspection.</p>
-        <h3>7.3 Further practice: conflicting edits</h3>
-        <p>For further practice, have Alice and Bob edit the same line of <code>message.txt</code>. Alice pushes first; Bob's push is rejected. Bob fetches, merges <code>origin/main</code> into his branch, resolves the <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code>, and <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> markers by reading both changes, verifies the result, then commits. Do not blindly choose “ours” or “theirs.”</p>
-      </div>
-      <div class="kb-section"><h2 id="incidents">8. Incident examples: leaked credential and lost commit</h2><ul><li><strong>Credential already pushed</strong>: revoke or rotate it at the provider first. Add <code>.env</code> to <code>.gitignore</code> and use <code>git rm --cached -- .env</code> to stop tracking it. Deleting it in a new commit does not remove it from older history, forks, or caches. Coordinate shared-history cleanup with the team.</li><li><strong>Lost local commit</strong>: find it with <code>git reflog</code>, then create <code>git branch rescue/recovered &lt;commit-id&gt;</code> and inspect it. Do not reset a shared branch to recover a local commit.</li></ul></div>
-      <div class="kb-section"><h2 id="ssh">9. GitHub SSH setup and quick start</h2><p>Run these commands in Windows PowerShell. Check for an existing public key first. If the default key path is already in use, choose another filename instead of overwriting it:</p><pre class="kb-code"><code>Get-ChildItem "$HOME/.ssh" -Filter "*.pub" -ErrorAction SilentlyContinue
-ssh-keygen -t ed25519 -C "you@example.com"
-Get-Content "$HOME/.ssh/id_ed25519.pub"</code></pre><p>Add only the <code>.pub</code> public key to GitHub Settings → SSH and GPG keys; never upload the private key. Adjust the path if you chose a custom filename, and add the private key to <code>ssh-agent</code> if needed. On the first connection, compare the host fingerprint with GitHub's published fingerprint before accepting it:</p><pre class="kb-code"><code>ssh -T git@github.com
-git remote -v
-git remote set-url origin git@github.com:OWNER/REPO.git
-git remote -v</code></pre><p>Replace <code>OWNER/REPO</code> with the actual repository. An existing SSH remote does not need to be changed. For multiple accounts, an alias in <code>$HOME/.ssh/config</code> can select a specific key:</p><pre class="kb-code"><code>Host github-work
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/id_ed25519_work
-  IdentitiesOnly yes</code></pre><p>Then use <code>git@github-work:TEAM/REPO.git</code> as the remote and test with <code>ssh -T git@github-work</code>. Short workflow:</p><pre class="kb-code"><code>git clone git@github.com:OWNER/REPO.git
-cd REPO
-git switch -c feature/quick-note
-# Edit README.md
-git add README.md
-git commit -m "docs: update README"
-git push -u origin HEAD</code></pre><p>Then open a pull request.</p></div>
-      <div class="kb-section"><h2 id="amend-message">10. Change only the last commit message</h2><pre class="kb-code"><code>git status -sb
-git show -s --format='%h %s' HEAD
-git commit --amend --only -m "docs: clarify setup"
-git show -s --format='%h %s' HEAD</code></pre><p><code>--only</code> changes the message without including unrelated staged changes; <code>--amend</code> creates a new commit ID. Use it only on an unpublished commit or a branch whose history rewrite was agreed with the team. Do not force-push shared <code>main</code> just to fix wording.</p></div>
-      <div class="kb-section"><h2 id="shared-branch">11. Several people on the same branch</h2><p>Prefer short-lived personal branches and pull requests. On a shared feature branch, do not rebase or amend commits that teammates may have pulled. If Bob pushed first and Alice's ordinary push is rejected, Alice should inspect and integrate remote changes:</p><pre class="kb-code"><code>git fetch origin
+git -C $alice log --oneline --graph -4
+</code></pre></figure>
+<p>Bob should see Alice's one-line addition. <code>--no-ff</code> records an explicit merge commit. Alice can then fast-forward to the new <code>main</code>, and both README files should match.</p>
+<p>The local demo uses direct pushes to illustrate branch relationships. Real teams normally use pull requests and reviews, with protected main branches updated according to project policy.</p>
+<p>The <a href="/knowledge-base/examples/git/team-demo.ps1">complete PowerShell demo script</a> checks the final commits and file contents, and leaves the temporary directory available for inspection.</p>
+</section>
+<section class="kb-section"><h2 id="shared-branch">7 Shared branches and conflict resolution</h2>
+<h3 id="git-7-1">7.1 Inspect both sides after a rejected push</h3>
+<p>Scenario: Bob has pushed to <code>feature/shared</code> before Alice, so Alice's ordinary push is rejected as non-fast-forward. From that branch, Alice runs:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git fetch origin
 git log --oneline --left-right --graph HEAD...origin/feature/shared
-git merge origin/feature/shared</code></pre><p>If the merge succeeds, run project tests before <code>git push origin HEAD:feature/shared</code>. If it stops on conflicts, edit the files, remove conflict markers, and run tests before continuing:</p><pre class="kb-code"><code>git status
-git add path/to/resolved-file
+git merge origin/feature/shared
+</code></pre></figure>
+<p>The left/right markers identify commits unique to the local and remote sides. A conflict-free merge normally completes automatically; after verification, run <code>git push origin HEAD:feature/shared</code>.</p>
+<h3 id="git-7-2">7.2 Resolve edits to the same line</h3>
+<p>If both people edited the same line in <code>message.txt</code>, the merge may pause. Use <code>git status</code> to find the conflicted file and inspect it in your editor:</p>
+<figure class="git-command"><figcaption>Text</figcaption><pre class="kb-code"><code class="language-text">  &lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD
+  message from Alice
+  =======
+  message from Bob
+  &gt;&gt;&gt;&gt;&gt;&gt;&gt; origin/feature/shared
+</code></pre></figure>
+<p>Edit the intended final content, remove the conflict markers, save, and continue:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git diff --check
+git add message.txt
 git commit
-git push origin HEAD:feature/shared</code></pre><p>If there are no conflicts, Git normally completes the merge; do not run an extra <code>git commit</code>. If the remote advances again, fetch and integrate again rather than overwriting Bob's commit.</p></div>
-      <div class="kb-section"><h2 id="force-with-lease">12. Replace a remote branch: only a coordinated personal branch</h2><p>A forced update can detach the remote's previous commits from its branch. Coordinate with anyone using it and check its exact remote commit ID. Never apply this example to <code>main</code>, <code>release/*</code>, or a protected branch. This PowerShell example targets only <code>feature/my-change</code>:</p><pre class="kb-code"><code>git status -sb
-if ((git branch --show-current) -ne "feature/my-change") { throw "Switch to feature/my-change first" }
+git push origin HEAD:feature/shared
+</code></pre></figure>
+<p>Expected result: no unmerged files in <code>git status</code> and the project's checks pass. If the remote advances again, fetch and integrate again. To abandon the current merge, use <code>git merge --abort</code>.</p>
+</section>
+<section class="kb-section"><h2 id="amend-message">8 Change commit messages</h2>
+<h3 id="git-8-1">8.1 Change only the last commit message</h3>
+<p>Inspect the target commit, then run:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git status -sb
+git show -s --format='%h %s' HEAD
+git commit --amend --only -m &quot;docs: clarify setup&quot;
+git show -s --format='%h %s' HEAD
+git diff 'HEAD@{1}' HEAD --
+git diff --cached
+</code></pre></figure>
+<p>With no file paths, <code>--amend --only</code> replaces the last commit message without adding unrelated staged changes. The diff between the old and new file trees should be empty, while existing staged changes remain visible in <code>git diff --cached</code>.</p>
+<p>The commit ID changes. Use this for your own unpublished commit or a branch whose rewrite has been agreed with collaborators.</p>
+<h3 id="git-8-2">8.2 Edit earlier commit messages</h3>
+<p>If the three commits to edit have an earlier parent and may be rewritten, run:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git rebase -i HEAD~3
+</code></pre></figure>
+<p>Change <code>pick</code> to <code>reword</code> for the intended commits, save, and edit the messages when prompted. Check <code>git log --oneline -3</code> afterward. Use <code>git rebase --abort</code> to leave an unfinished rebase.</p>
+</section>
+<section class="kb-section"><h2 id="force-with-lease">9 Replace a remote branch</h2>
+<h3 id="git-9-1">9.1 Record the remote commit to be replaced</h3>
+<p>This example targets a personal <code>feature/my-change</code> branch whose rewrite has been coordinated. Inspect the working tree and current branch, then capture the fetched remote commit:</p>
+<figure class="git-command"><figcaption>PowerShell</figcaption><pre class="kb-code"><code class="language-powershell">git status -sb
+if ((git branch --show-current) -ne &quot;feature/my-change&quot;) { throw &quot;Switch to feature/my-change first&quot; }
 git fetch origin
-git log --oneline --left-right --graph HEAD...origin/feature/my-change
-git branch backup/feature-my-change origin/feature/my-change
-$remoteLine = git ls-remote origin refs/heads/feature/my-change
-$expected = ($remoteLine -split "\s+")[0]
-if (-not $expected) { throw "Remote branch not found" }
-git push "--force-with-lease=refs/heads/feature/my-change:$expected" origin HEAD:refs/heads/feature/my-change</code></pre><p>The push succeeds only if the remote still points at <code>$expected</code>. If someone pushes after your check, Git rejects it. Reinspect the branch; do not automatically retry a force push. A new branch and pull request are preferable, while bare <code>--force</code> lacks this protection.</p></div>
-      <div class="kb-section"><h2 id="dates">13. Inspect and change Git timestamps</h2><p>Commits have an <code>AuthorDate</code> (when the author wrote the change) and a <code>CommitDate</code> (when the commit object was created). A working-tree file's filesystem modification time is not preserved as one repository-wide Git timestamp. <code>git log</code> reports commit history, not the file's current filesystem mtime.</p><pre class="kb-code"><code>git log -1 --format=fuller
-git log -1 --date=iso-strict --format='%h %ad %s' -- path/to/file</code></pre><p>To change both dates of the last <strong>unshared</strong> commit in PowerShell, set the committer date in the environment and the author date with <code>--date</code>. Confirm the timestamp, time zone, and target commit first:</p><pre class="kb-code"><code>$env:GIT_COMMITTER_DATE = "2026-09-23T10:00:00+08:00"
+$expected = git rev-parse --verify refs/remotes/origin/feature/my-change
+if ($LASTEXITCODE -ne 0) { throw &quot;Remote-tracking branch not found&quot; }
+git log --oneline --left-right --graph &quot;HEAD...$expected&quot;
+git branch (&quot;backup/my-change-&quot; + (Get-Date -Format yyyyMMddHHmmss)) $expected
+</code></pre></figure>
+<p><code>$expected</code> remains fixed at the fetched commit you are about to review. Inspect both sides before deciding to replace the branch. The backup branch preserves this remote version for comparison or recovery.</p>
+<h3 id="git-9-2">9.2 Push with an explicit expected commit</h3>
+<p>After reviewing the replacement, run:</p>
+<figure class="git-command"><figcaption>PowerShell</figcaption><pre class="kb-code"><code class="language-powershell">git push &quot;--force-with-lease=refs/heads/feature/my-change:$expected&quot; origin HEAD:refs/heads/feature/my-change
+git ls-remote origin refs/heads/feature/my-change
+git rev-parse HEAD
+</code></pre></figure>
+<p>The push updates the remote only if it still points to <code>$expected</code>. After a successful push, the last two commands should report the same commit ID. If someone has pushed in the meantime, the lease rejects the replacement; fetch and review again.</p>
+<blockquote>
+<p>Replacing a branch changes the history it points to. This example is for a coordinated personal feature branch. For a branch others depend on, agree on their synchronization procedure first.</p>
+</blockquote>
+</section>
+<section class="kb-section"><h2 id="dates">10 Inspect and change Git dates</h2>
+<h3 id="git-10-1">10.1 How the three timestamps differ</h3>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Timestamp</th>
+<th>Meaning</th>
+<th>How to inspect it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AuthorDate</td>
+<td>Author timestamp recorded in a commit</td>
+<td><code>git log --format=fuller</code></td>
+</tr>
+<tr>
+<td>CommitDate</td>
+<td>Committer timestamp recorded in a commit</td>
+<td><code>git log --format=fuller</code></td>
+</tr>
+<tr>
+<td>File modification time</td>
+<td>A working-tree filesystem attribute</td>
+<td>Operating-system file properties</td>
+</tr>
+</tbody>
+</table>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git log -1 --format=fuller
+git log -1 --date=iso-strict --format='%h %ad %cd %s' -- path/to/file
+</code></pre></figure>
+<p><code>%ad</code> shows the author date and <code>%cd</code> the committer date. Git does not store filesystem mtime as versioned file content; changing commit dates does not set all working-tree file times.</p>
+<h3 id="git-10-2">10.2 Change the last unpublished commit dates</h3>
+<p>The PowerShell example below sets both dates. Replace the example timestamp with the intended value:</p>
+<figure class="git-command"><figcaption>PowerShell</figcaption><pre class="kb-code"><code class="language-powershell">$previousCommitterDate = $env:GIT_COMMITTER_DATE
 try {
-    git commit --amend --only --no-edit --date="2026-09-23T10:00:00+08:00"
+    $env:GIT_COMMITTER_DATE = &quot;2026-09-23T10:00:00+08:00&quot;
+    git commit --amend --only --no-edit --date=&quot;2026-09-23T10:00:00+08:00&quot;
 } finally {
-    Remove-Item Env:GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
+    $env:GIT_COMMITTER_DATE = $previousCommitterDate
 }
-git log -1 --format=fuller</code></pre><p>This changes the commit ID, not filesystem modification times. To <strong>rewrite timestamps across multiple commits</strong>, first work in an isolated backup and plan how branches, tags, signatures, CI, and collaborators will be handled. On an isolated branch, <code>git rebase -i --root</code> lets you mark commits <code>edit</code>; amend each date as above, then run <code>git rebase --continue</code>. Editing an older commit changes the IDs of all its descendants. Merge-heavy histories need extra care; do not run a blanket rewrite or force-push directly in a shared repository.</p></div>
-      <div class="kb-section"><h2>References</h2><p><a href="https://docs.github.com/en/authentication/connecting-to-github-with-ssh" target="_blank" rel="noopener">GitHub SSH setup</a> · <a href="https://git-scm.com/docs/git-commit" target="_blank" rel="noopener">Git commit</a> · <a href="https://git-scm.com/docs/git-push" target="_blank" rel="noopener">Git push and force-with-lease</a> · <a href="https://git-scm.com/docs/git-rebase" target="_blank" rel="noopener">Git rebase</a></p><p><a href="/knowledge-base/en/">Back to Knowledge Base</a></p></div>
+git log -1 --format=fuller
+</code></pre></figure>
+<p><code>--date</code> sets the author date, the environment variable sets the committer date, and <code>--no-edit</code> preserves the message. Inspect both dates, their time zones, and the file diff afterward. The commit ID changes.</p>
+<h3 id="git-10-3">10.3 Adjust dates across several commits</h3>
+<p>In an isolated copy, preserve the original branch and decide how to handle tags, signatures, merge commits, and collaborators. Use <code>git rebase -i --root</code> and mark the intended commits <code>edit</code>. At each stop, amend the dates as above, then run <code>git rebase --continue</code>.</p>
+<p>Changing an older commit changes descendant IDs too. For histories containing merges, establish how merge relationships will be retained. Review the complete commit graph and file trees, and run project checks before sharing the result.</p>
+</section>
+<section class="kb-section"><h2 id="recover">11 Undo changes and recover versions</h2>
+<h3 id="git-11-1">11.1 Choose a command for the location of the change</h3>
+<table class="kb-table">
+<thead>
+<tr>
+<th>Intended action</th>
+<th>Command</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Unstage a file</td>
+<td><code>git restore --staged -- file</code></td>
+<td>Working-tree edits remain</td>
+</tr>
+<tr>
+<td>Discard unstaged edits</td>
+<td><code>git restore -- file</code></td>
+<td>Restores from the index, overwriting the corresponding working-tree edits</td>
+</tr>
+<tr>
+<td>Undo a published commit</td>
+<td><code>git revert COMMIT</code></td>
+<td>Creates an inverse commit</td>
+</tr>
+</tbody>
+</table>
+<p>For example, unstage the README:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git restore --staged -- README.md
+git status -sb
+git diff -- README.md
+</code></pre></figure>
+<p>Expected result: the edit remains but is no longer staged. Before using <code>restore</code> to overwrite a working-tree file, confirm which edits you intend to discard.</p>
+<h3 id="git-11-2">11.2 Revert a published commit</h3>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git log --oneline -5
+git revert COMMIT_ID
+git show --stat HEAD
+</code></pre></figure>
+<p>Replace <code>COMMIT_ID</code> with the ordinary commit to undo. Inspect the inverse commit, run checks, and push normally. Reverting a merge also requires choosing the mainline parent.</p>
+<p><code>reset --hard</code> resets the index and overwrites the corresponding working-tree content. An inverse commit keeps a shared-branch correction visible for review.</p>
+</section>
+<section class="kb-section"><h2 id="incidents">12 Common problems and incident examples</h2>
+<h3 id="git-12-1">12.1 Recover a lost local commit</h3>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git reflog
+git branch rescue/recovered COMMIT_ID
+git show --stat rescue/recovered
+</code></pre></figure>
+<p>Find the intended commit in the reflog, create a rescue branch, and inspect it. Reflogs are local and have retention limits; preserve a needed commit on a regular branch after checking it.</p>
+<h3 id="git-12-2">12.2 Handle a committed credential</h3>
+<p>First revoke or rotate the credential at its provider. Add <code>.env</code> to <code>.gitignore</code>, then stop tracking the file:</p>
+<figure class="git-command"><figcaption>Git commands</figcaption><pre class="kb-code"><code class="language-bash">git rm --cached -- .env
+git add .gitignore
+git commit -m &quot;chore: stop tracking local environment&quot;
+</code></pre></figure>
+<p><code>--cached</code> retains the local file. A deletion commit does not remove a credential from old history, forks, or caches; coordinate history cleanup with the repository maintainers and collaborators.</p>
+</section>
+<section class="kb-section"><h2 id="references">13 References</h2>
+<ul>
+<li><a href="https://docs.github.com/en/authentication/connecting-to-github-with-ssh">GitHub SSH setup and testing</a></li>
+<li><a href="https://git-scm.com/docs/git-commit">Git commit and amend</a></li>
+<li><a href="https://git-scm.com/docs/git-merge">Git merge</a> and <a href="https://git-scm.com/docs/git-rebase">Git rebase</a></li>
+<li><a href="https://git-scm.com/docs/git-push">Git push and force-with-lease</a></li>
+<li><a href="https://git-scm.com/docs/git-restore">Git restore</a> and <a href="https://git-scm.com/docs/git-reflog">Git reflog</a></li>
+</ul>
+<p><a href="/knowledge-base/en/">Back to Knowledge Base</a></p>
+</section>
     </div>
   </div></div></div></div>
   <div class="page-main-content-bottom"><footer class="footer"><div class="info-container"><div class="copyright-info info-item">&copy; 2022 - 2026 <i class="fas fa-heart icon-animate"></i> <a href="/">yanruihe</a></div><div class="theme-info info-item">Git Knowledge Base</div></div></footer></div>

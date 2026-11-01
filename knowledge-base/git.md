@@ -1,90 +1,231 @@
 # Git 知识库
 
-## 1. Git 如何保存和上传修改
+Git 日常使用从配置身份和 SSH 开始，再完成获取仓库、保存修改、提交评审和同步分支。下面按实际操作顺序展开，每个案例给出命令、参数说明和检查结果，便于边操作边查阅。
 
-例如你修改了 `README.md`，文件不会自动上传到 GitHub。它会经过下面四步：
+Git 命令代码块可在 PowerShell 或 Bash 中执行；标为 PowerShell 的脚本在 Windows 的 PowerShell 7 中执行。`OWNER/REPO`、邮箱、分支名和文件名按实际项目替换。各节注明了前提，不需要把整页命令连续执行一遍。
 
-1. **工作区**：你在电脑上编辑文件，改动还没有成为 Git 的版本记录。
-2. **暂存区**：运行 `git add README.md`，选中这次准备提交的内容。
-3. **本地仓库**：运行 `git commit -m "docs: update README"`，在电脑上保存一条提交记录。
-4. **远程仓库**：运行 `git push`，把已提交的记录上传到 GitHub。
+## 1 Git 如何保存修改
 
-```bash
-git status
-git add README.md
-git commit -m "docs: update README"
-git push
+### 1.1 文件经过的四个位置
+
+修改 `README.md` 后，编辑内容先留在工作区。用 `git add` 选入暂存区，再用 `git commit` 形成一条本地记录，最后通过 `git push` 上传提交。
+
+| 位置 | 保存什么 | 常用操作 |
+| --- | --- | --- |
+| 工作区 | 正在编辑的文件 | 编辑器、`git diff` |
+| 暂存区 | 下一次提交准备保存的内容 | `git add`、`git diff --cached` |
+| 本地仓库 | 提交、分支和标签 | `git commit`、`git log` |
+| 远程仓库 | 团队共享的提交与分支 | `git fetch`、`git push` |
+
+```text
+编辑文件 → git add → 暂存区 → git commit → 本地提交 → git push → 远程分支
 ```
 
-`git status` 可以随时查看哪些文件被修改、哪些内容已暂存。`git add` 不是提交，`git commit` 也不会自动上传。如果是新分支首次推送，使用 `git push -u origin HEAD`。
+`git add` 后继续编辑文件，新编辑的部分仍在工作区；只有再次暂存，才会进入下一次提交。`git commit` 完成后，也要推送才会更新远程仓库。
 
-## 2. 推荐日常流程
+### 1.2 查看当前状态和差异
+
+进入项目目录后，先执行：
 
 ```bash
+git status -sb
+git diff
+git diff --cached
+```
+
+`git diff` 查看尚未暂存的修改；`git diff --cached` 查看已暂存内容与当前提交的差异。`git status -sb` 的文件状态有两列，第一列对应暂存区，第二列对应工作区。
+
+| 状态示例 | 含义 |
+| --- | --- |
+| ` M README.md` | 工作区已修改，尚未暂存 |
+| `M  README.md` | 已暂存修改 |
+| `MM README.md` | 暂存后又继续修改了文件 |
+| `?? notes.txt` | 新文件尚未被跟踪 |
+
+## 2 Git 环境与 GitHub SSH 配置
+
+### 2.1 检查 Git 和提交身份
+
+```bash
+git --version
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+git config --get user.name
+git config --get user.email
+```
+
+`user.name` 和 `user.email` 写入提交记录。某个项目需要不同身份时，在仓库内去掉 `--global` 配置即可。检查输出应与本次项目使用的身份一致。
+
+### 2.2 生成密钥并添加公钥
+
+先在 PowerShell 中检查已有公钥：
+
+```powershell
+$sshDir = Join-Path $env:USERPROFILE ".ssh"
+Get-ChildItem $sshDir -Filter "*.pub" -ErrorAction SilentlyContinue
+```
+
+已有可用密钥时可直接使用；新建密钥时指定独立文件名：
+
+```powershell
+New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+$keyFile = Join-Path $sshDir "id_ed25519_github"
+if (Test-Path $keyFile) { throw "Key already exists; reuse it or choose another filename." }
+ssh-keygen -t ed25519 -C "you@example.com" -f $keyFile
+Get-Content "$keyFile.pub"
+```
+
+按提示设置密钥口令，将输出的公钥添加到 GitHub 的 **Settings → SSH and GPG keys → New SSH key**。私钥是没有 `.pub` 后缀的文件，保留在自己的电脑中。
+
+### 2.3 测试连接并设置仓库地址
+
+首次连接前，对照 [GitHub 官方主机指纹](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints)核对提示。使用刚才的自定义密钥测试：
+
+```powershell
+ssh -T -i $keyFile -o IdentitiesOnly=yes git@github.com
+```
+
+成功时，GitHub 会显示已通过身份验证的账号，并提示不提供 shell 访问。`ssh -T` 成功认证后仍可能以状态码 `1` 退出，应结合提示判断结果。
+
+要让 Git 后续连接也使用该密钥，在 `$sshDir/config` 中加入：
+
+```sshconfig
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_github
+  IdentitiesOnly yes
+```
+
+在已有仓库中检查并切换远程地址：
+
+```bash
+git remote -v
+git remote set-url origin git@github.com:OWNER/REPO.git
+git remote -v
+```
+
+检查结果：`origin` 的 fetch 和 push 地址都指向目标仓库。设置地址本身不会上传文件。
+
+### 2.4 多账号使用不同密钥
+
+在 SSH config 中为工作账号增加一个别名：
+
+```sshconfig
+Host github-work
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_work
+  IdentitiesOnly yes
+```
+
+该账号的仓库地址使用 `git@github-work:TEAM/REPO.git`，测试命令使用 `ssh -T git@github-work`。别名负责选择连接密钥；提交身份仍由 `user.name`、`user.email` 决定。
+
+## 3 从获取仓库到第一次推送
+
+### 3.1 获取代码并创建工作分支
+
+```bash
+git clone git@github.com:OWNER/REPO.git
+cd REPO
 git switch main
 git pull --ff-only origin main
-git switch -c feature/short-description
-
-# 修改后检查变更
-git status
-git diff
-git diff --check
-
-# 只提交相关内容
-git add -p
-git commit -m "docs: update git notes"
-
-# 提交前同步主线
-git fetch origin
-git rebase origin/main
-git push -u origin HEAD
+git switch -c feature/quick-note
 ```
 
-小提交更容易审查和回滚。提交信息建议使用 `docs:`, `feat:`, `fix:`, `build:` 等前缀，并说明结果而不是只描述动作。
+`clone` 建立本地副本；`pull --ff-only` 只接受快进同步；`switch -c` 基于当前提交创建并切换到工作分支。若项目主分支名称不同，替换 `main`。
 
-## 3. 分支、合并与变基
-
-- 新功能或知识专题使用短生命周期分支，例如 `feature/logging`。
-- 本地尚未共享的提交可以用 `rebase` 整理历史。
-- 已推送且被别人依赖的提交不要随意重写；需要修正时优先追加修复提交。
-- 合并前确认工作区干净，并阅读完整 diff，而不只看最后一个文件。
-
-常用检查：
+检查分支：
 
 ```bash
+git branch --show-current
+git status -sb
+```
+
+应显示 `feature/quick-note`。如果快进同步被拒绝，先检查分叉原因，再按第 4 节选择合并或变基。
+
+### 3.2 编辑文件并形成一次提交
+
+在编辑器中修改 `README.md`，保存后执行：
+
+```bash
+git diff -- README.md
+git add README.md
+git diff --cached
+git diff --cached --check
+git commit -m "docs: update README"
+```
+
+先看实际差异，再暂存目标文件。`--check` 检查差异中的空白问题和冲突标记等；最终提交内容以 `git diff --cached` 为准。
+
+检查结果：
+
+```bash
+git log -1 --oneline
+git status -sb
+```
+
+日志应出现新提交，已提交的修改应从状态列表中消失。
+
+### 3.3 推送分支并发起评审
+
+```bash
+git push -u origin HEAD
+git branch -vv
+```
+
+`HEAD` 指当前分支；`-u` 为分支建立 upstream 关联。检查 `git branch -vv` 是否显示对应的 `origin/feature/quick-note`，然后在 GitHub 上发起 Pull Request，填写改动原因和验证结果。
+
+## 4 分支的合并与变基
+
+### 4.1 查看分支与提交关系
+
+```bash
+git fetch origin
+git branch -a
 git log --oneline --decorate --graph -20
 git diff origin/main...HEAD
-git diff --name-only origin/main...HEAD
 ```
 
-## 4. 安全撤销与恢复
+`fetch` 更新远程跟踪信息，不会自动把远程内容合入当前分支。`origin/main...HEAD` 的差异从共同祖先计算，可用于审查当前分支引入的修改。
+
+### 4.2 选择 merge 或 rebase
+
+| 操作 | 对提交历史的影响 | 使用场景 |
+| --- | --- | --- |
+| `merge` | 保留已有提交，必要时增加合并提交 | 整合已经共享的分支 |
+| `rebase` | 在新基点上重放提交，通常生成新的提交 ID | 整理自己尚未共享的提交 |
+
+将最新主线合入当前功能分支：
 
 ```bash
-# 取消某个文件尚未提交的工作区修改
-git restore -- path/to/file
-
-# 从暂存区移除，但保留工作区修改
-git restore --staged -- path/to/file
-
-# 撤销已经发布的提交，生成新的反向提交
-git revert <commit>
-
-# 查找丢失的提交或分支指针
-git reflog
+git fetch origin
+git merge origin/main
 ```
 
-`reset --hard` 会直接丢弃工作区内容，除非已经确认目标和备份，否则不要使用。公共分支的历史修复优先选择 `revert`。
+如果当前分支只有自己尚未共享的提交，也可选择：
 
-## 5. 提交与评审约定
+```bash
+git fetch origin
+git rebase origin/main
+```
 
-- 一个提交聚焦一个逻辑变更，方便理解、审查和回滚。
-- 提交消息用简短前缀标明类型与范围，例如 `docs(git): clarify restore examples`。
-- 提交前检查完整 diff，确认没有密钥、临时文件或无关改动。
-- 合并前记录评审意见和验证结果；修正问题时追加清晰的提交。
+完成后检查提交图和完整差异，运行项目对应的验证。别人已经基于这些提交继续开发时，先协调历史整理方式。
 
-## 6. 实际案例：只提交需要的改动
+### 4.3 中断或继续合并与变基
 
-场景：`README.md` 和本地配置都改了，但这次只发布文档。先看差异，再明确暂存范围：
+| 当前操作 | 处理完冲突后 | 放弃本次操作 |
+| --- | --- | --- |
+| merge | `git add` 后执行 `git commit` | `git merge --abort` |
+| rebase | `git add` 后执行 `git rebase --continue` | `git rebase --abort` |
+
+开始合并或变基前先保存并处理好已有修改；`--abort` 用于退出当前正在进行的操作。
+
+## 5 按需提交与提交前检查
+
+### 5.1 只提交文档修改
+
+场景：`README.md` 和本地配置都改了，这次只提交文档。
 
 ```bash
 git status -sb
@@ -95,13 +236,27 @@ git diff --cached --check
 git commit -m "docs: clarify setup steps"
 ```
 
-如果暂存错了，用 `git restore --staged -- README.md` 移出暂存区；工作区的编辑仍然保留。需要按代码块选择时可用 `git add -p`。
+检查结果：提交包含 `README.md` 的修改，本地配置的编辑仍留在工作区。
 
-## 7. 双人协作 Demo：分支、评审、合并与同步
+### 5.2 分块暂存和取消暂存
 
-使用 PowerShell，在临时目录中模拟远端、Alice 和 Bob 三个独立仓库；不会改动真实项目。
+```bash
+git add -p
+git diff --cached
+git restore --staged -- README.md
+```
 
-### 7.1 建立临时远端和两个工作副本
+`add -p` 按差异块选择内容。`restore --staged` 取消该文件的暂存，工作区的编辑仍保留；随后可重新选择要提交的部分。
+
+### 5.3 提交与评审约定
+
+一个提交对应一个清晰的逻辑变更，例如 `docs(git): clarify restore examples`。提交前阅读完整差异，检查临时文件、账户信息和与任务无关的改动；合并前记录验证结果和评审结论。小提交更容易定位问题和按提交撤销。
+
+## 6 双人协作 Demo
+
+本节在 PowerShell 中建立一个临时裸仓库，模拟远端和 Alice、Bob 两个独立工作副本。`git -C` 指定在哪个仓库执行命令，便于在同一终端切换角色。
+
+### 6.1 建立远端和两个工作副本
 
 ```powershell
 $demoRoot = Join-Path $env:TEMP ("git-team-demo-" + [guid]::NewGuid().ToString("N"))
@@ -123,7 +278,9 @@ git -C $bob config user.name Bob
 git -C $bob config user.email bob@example.test
 ```
 
-### 7.2 Alice 提交功能分支，Bob 评审并合并
+`--bare` 创建用于共享提交的仓库，不包含日常编辑的工作区。初次克隆空仓库会出现提示；Alice 推送第一条提交后，Bob 才克隆带有 `main` 的副本。
+
+### 6.2 Alice 提交功能分支
 
 ```powershell
 git -C $alice switch -c docs/add-workflow
@@ -131,7 +288,13 @@ Add-Content (Join-Path $alice "README.md") "Review changes before merging."
 git -C $alice add README.md
 git -C $alice commit -m "docs: add review workflow"
 git -C $alice push -u origin docs/add-workflow
+```
 
+检查结果：远端增加 `docs/add-workflow` 分支，`main` 尚未改变。
+
+### 6.3 Bob 合并后 Alice 同步主线
+
+```powershell
 git -C $bob fetch origin
 git -C $bob diff origin/main...origin/docs/add-workflow
 git -C $bob log --oneline origin/main..origin/docs/add-workflow
@@ -144,76 +307,17 @@ git -C $alice pull --ff-only origin main
 git -C $alice log --oneline --graph -4
 ```
 
-预期：Bob 的差异检查只看到 Alice 的一行新增内容；合并后 Alice 的 `main` 能快进到最新版本。真实 GitHub 团队一般由 Alice 发起 Pull Request、Bob 在网页上评审并合并，而不是让 Bob 直接推送受保护的 `main`；最后 Alice 同步主线。
+Bob 的差异检查应只看到 Alice 新增的一行内容；`--no-ff` 保留一个明确的合并提交。Alice 最后可以快进到新的 `main`，两人的 README 内容一致。
 
-也可以下载并运行仓库中的 [PowerShell 演练脚本](examples/git/team-demo.ps1)；脚本会验证最终结果，并保留临时目录供检查。
+这个本地 Demo 用直接推送演示分支关系。真实团队通常由 Alice 提交 Pull Request，Bob 在代码托管平台评审、合并，受保护主分支按项目规则更新。
 
-### 7.3 进阶练习：两人修改同一行造成冲突
+完整可运行版本见 [PowerShell 演练脚本](/knowledge-base/examples/git/team-demo.ps1)。脚本检查两人的最终提交和文件内容，并保留临时目录供查看。
 
-再试一个冲突场景：Alice 和 Bob 分别修改 `message.txt` 的同一行；Alice 先推送，Bob 的推送被拒绝。Bob 先 `git fetch origin`，再在自己的分支合并 `origin/main`，手工处理 `<<<<<<<`、`=======`、`>>>>>>>` 标记，运行验证后提交。不要直接选择“保留我的/对方的”来代替阅读实际内容。
+## 7 多人操作同一分支与冲突处理
 
-## 8. 故障案例：密钥泄露与误删提交
+### 7.1 推送被拒绝后检查双方提交
 
-- **密钥已推送**：先在服务端吊销或轮换密钥，再用 `.gitignore` 和 `git rm --cached -- .env` 防止再次提交。删除文件并不能从旧提交、fork 或缓存中清除密钥；共享仓库的历史清理需要团队协调。
-- **误删本地提交**：先用 `git reflog` 找到原提交，再建立 `git branch rescue/recovered <commit-id>` 检查内容。不要在共享分支上直接使用 `reset --hard`。
-
-## 9. GitHub SSH 配置与快速使用
-
-以下命令在 Windows PowerShell 中执行。先检查是否已有可用公钥；生成新密钥时，若默认路径已有密钥，不要覆盖它，改用另一个文件名：
-
-```powershell
-Get-ChildItem "$HOME/.ssh" -Filter "*.pub" -ErrorAction SilentlyContinue
-ssh-keygen -t ed25519 -C "you@example.com"
-Get-Content "$HOME/.ssh/id_ed25519.pub"
-```
-
-只把 `.pub` 公钥添加到 GitHub 的 **Settings → SSH and GPG keys**；绝不上传私钥。若使用了自定义文件名，相应地修改读取路径，并按需把私钥加入 `ssh-agent`。首次连接前核对 GitHub 官方公布的主机指纹，不能盲目接受提示：
-
-```powershell
-ssh -T git@github.com
-git remote -v
-git remote set-url origin git@github.com:OWNER/REPO.git
-git remote -v
-```
-
-将 `OWNER/REPO` 换成实际仓库；已有 SSH 远端就不必再次设置。多账号可在 `$HOME/.ssh/config` 中指定别名和密钥：
-
-```sshconfig
-Host github-work
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/id_ed25519_work
-  IdentitiesOnly yes
-```
-
-此时远端写成 `git@github-work:TEAM/REPO.git`，测试命令改为 `ssh -T git@github-work`。完成配置后，最短的分支使用流程：
-
-```bash
-git clone git@github.com:OWNER/REPO.git
-cd REPO
-git switch -c feature/quick-note
-# 修改 README.md
-git add README.md
-git commit -m "docs: update README"
-git push -u origin HEAD
-```
-
-然后发起 Pull Request。这里的 `OWNER/REPO`、`REPO` 和文件名要换成实际值。
-
-## 10. 只修改最后一次 commit 信息
-
-```bash
-git status -sb
-git show -s --format='%h %s' HEAD
-git commit --amend --only -m "docs: clarify setup"
-git show -s --format='%h %s' HEAD
-```
-
-`--only` 表示只改最后一次提交的说明，不把已暂存的其他文件一起提交；`--amend` 会生成新的 commit ID。只适用于尚未共享、或已与团队约定可以改写的分支。已经发布到共享 `main` 的提交不要为了改文案而强推。
-
-## 11. 多人同时操作同一分支
-
-每人优先使用自己的短期分支并通过 Pull Request 评审；多人共用同一功能分支时，不要对其他人已拉取的提交做 `rebase` 或 `amend`。如果 Bob 已经先推送，而 Alice 的普通 `git push` 被拒绝，Alice 应先检查并整合远端改动：
+场景：多人共用 `feature/shared`，Bob 已先推送，Alice 的普通推送因非快进被拒绝。Alice 在该分支执行：
 
 ```bash
 git fetch origin
@@ -221,56 +325,194 @@ git log --oneline --left-right --graph HEAD...origin/feature/shared
 git merge origin/feature/shared
 ```
 
-无冲突时，运行项目测试后再执行 `git push origin HEAD:feature/shared`。如果 merge 因冲突中断，先编辑文件、删除冲突标记、运行测试，再继续：
+日志中的左右标记显示本地和远程各自独有的提交。无冲突时 merge 通常直接完成；验证后执行 `git push origin HEAD:feature/shared`。
+
+### 7.2 两人修改同一行时处理冲突
+
+如果双方都修改了 `message.txt` 的同一行，merge 可能暂停。先用 `git status` 找到冲突文件，在编辑器中查看：
+
+```text
+  <<<<<<< HEAD
+  message from Alice
+  =======
+  message from Bob
+  >>>>>>> origin/feature/shared
+```
+
+根据实际需求编辑最终内容，删除冲突标记，保存后继续：
 
 ```bash
-git status
-git add path/to/resolved-file
+git diff --check
+git add message.txt
 git commit
 git push origin HEAD:feature/shared
 ```
 
-仅在 merge 发生冲突时才需要手工 `git add` / `git commit`；无冲突时 `git merge` 通常会直接完成。合并前检查双方独有提交，合并后运行项目测试。若远端再次前进，重复 fetch、检查和整合，而不是直接强推覆盖 Bob 的提交。
+检查结果：`git status` 不再显示未合并文件，项目验证通过。若远端再次前进，重新获取并整合改动。需要放弃本次合并时使用 `git merge --abort`。
 
-## 12. 覆盖远端分支：仅限已协调的个人分支
+## 8 只修改 commit 信息
 
-覆盖会让远端原有提交脱离分支。先与使用该分支的人确认，并检查远端的准确提交 ID；不要对 `main`、`release/*` 或受保护分支套用此流程。以下 PowerShell 示例只针对 `feature/my-change`：
+### 8.1 修改最后一次提交说明
+
+先确认要修改的提交，再执行：
+
+```bash
+git status -sb
+git show -s --format='%h %s' HEAD
+git commit --amend --only -m "docs: clarify setup"
+git show -s --format='%h %s' HEAD
+git diff 'HEAD@{1}' HEAD --
+git diff --cached
+```
+
+这里 `--amend --only` 配合不指定文件路径，只替换最后一次提交的说明，已暂存的其他修改不会被加入。两次提交的文件树差异应为空，已有暂存内容仍可在 `git diff --cached` 中查看。
+
+修改后提交 ID 会变化。适用于自己的未共享提交，或已协调允许改写的分支。
+
+### 8.2 修改前面几次提交的说明
+
+待整理的三条提交之前还有父提交，并确认它们允许改写后，可执行：
+
+```bash
+git rebase -i HEAD~3
+```
+
+在编辑器中把目标提交前的 `pick` 改为 `reword`，保存后按提示修改提交说明。结束后用 `git log --oneline -3` 检查结果；需要退出时执行 `git rebase --abort`。
+
+## 9 覆盖远程分支
+
+### 9.1 记录准备替换的远程提交
+
+本例用于已经协调允许改写的个人功能分支 `feature/my-change`。先确认工作区状态和当前分支，取得待检查的远程提交：
 
 ```powershell
 git status -sb
 if ((git branch --show-current) -ne "feature/my-change") { throw "Switch to feature/my-change first" }
 git fetch origin
-git log --oneline --left-right --graph HEAD...origin/feature/my-change
-git branch backup/feature-my-change origin/feature/my-change
-$remoteLine = git ls-remote origin refs/heads/feature/my-change
-$expected = ($remoteLine -split "\s+")[0]
-if (-not $expected) { throw "Remote branch not found" }
-git push "--force-with-lease=refs/heads/feature/my-change:$expected" origin HEAD:refs/heads/feature/my-change
+$expected = git rev-parse --verify refs/remotes/origin/feature/my-change
+if ($LASTEXITCODE -ne 0) { throw "Remote-tracking branch not found" }
+git log --oneline --left-right --graph "HEAD...$expected"
+git branch ("backup/my-change-" + (Get-Date -Format yyyyMMddHHmmss)) $expected
 ```
 
-命令只在远端仍指向 `$expected` 时更新该分支；如果有人在检查后又推送，Git 会拒绝。拒绝后重新检查，不能自动重试强推。优先选择新分支加 Pull Request；裸 `--force` 没有上述保护。
+`$expected` 固定为刚获取、准备审阅的提交。先读完双方差异，确认替换范围；备份分支保存这一远程版本，方便之后核对。
 
-## 13. 查看与修改 Git 时间
+### 9.2 使用准确提交 ID 作为 lease
 
-Git 提交有两个时间：`AuthorDate`（作者写出改动）和 `CommitDate`（提交对象形成）。文件系统的“最后修改时间”是工作区文件属性，不由 Git 提交历史统一保存；`git log` 查的是提交时间。
+确认后再推送：
+
+```powershell
+git push "--force-with-lease=refs/heads/feature/my-change:$expected" origin HEAD:refs/heads/feature/my-change
+git ls-remote origin refs/heads/feature/my-change
+git rev-parse HEAD
+```
+
+推送只有在远端仍指向 `$expected` 时才会更新该分支。推送成功后，最后两条命令显示的提交 ID 应一致；如果期间别人又推送，lease 会拒绝本次覆盖，需要重新获取和审阅。
+
+> 覆盖会改变远程分支所指向的历史。本例不用于共享主线或受保护分支；有协作依赖时，应先确定相关人员的同步方式。
+
+## 10 查看与修改 Git 时间
+
+### 10.1 三种时间分别表示什么
+
+| 时间 | 含义 | 查看方式 |
+| --- | --- | --- |
+| AuthorDate | 提交记录的作者时间 | `git log --format=fuller` |
+| CommitDate | 提交记录的提交者时间 | `git log --format=fuller` |
+| 文件修改时间 | 工作区文件的文件系统属性 | 操作系统文件属性 |
 
 ```bash
 git log -1 --format=fuller
-git log -1 --date=iso-strict --format='%h %ad %s' -- path/to/file
+git log -1 --date=iso-strict --format='%h %ad %cd %s' -- path/to/file
 ```
 
-只修改当前分支最后一条**未共享**提交的两个时间，可在 PowerShell 中设置提交者时间，并用 `--date` 设置作者时间。运行前确保日期、时区和目标提交正确：
+`%ad` 显示作者时间，`%cd` 显示提交者时间。Git 不把文件系统 mtime 作为文件版本内容保存；修改提交日期也不会统一修改工作区文件时间。
+
+### 10.2 修改最后一条未共享提交的时间
+
+以下 PowerShell 示例同时设置作者时间和提交者时间，示例日期按真实情况替换：
 
 ```powershell
-$env:GIT_COMMITTER_DATE = "2026-09-23T10:00:00+08:00"
+$previousCommitterDate = $env:GIT_COMMITTER_DATE
 try {
+    $env:GIT_COMMITTER_DATE = "2026-09-23T10:00:00+08:00"
     git commit --amend --only --no-edit --date="2026-09-23T10:00:00+08:00"
 } finally {
-    Remove-Item Env:GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
+    $env:GIT_COMMITTER_DATE = $previousCommitterDate
 }
 git log -1 --format=fuller
 ```
 
-这会改变 commit ID，但不改文件系统的修改时间。若要**整体改写多条提交的时间**，应先在隔离副本备份并确认分支、标签、签名、CI 和协作者同步方案；可在独立分支用交互式 `git rebase -i --root` 逐条标记 `edit`，每次按上例 amend 日期后 `git rebase --continue`。改动旧提交会连带改写其后所有提交的 ID，含 merge 的历史还需特别处理；不要在共享仓库直接批量执行或强推。
+`--date` 指定作者时间，环境变量指定提交者时间，`--no-edit` 保留提交说明。执行后检查两个日期、时区和文件差异；提交 ID 会随之改变。
 
-参考：[GitHub SSH 配置](https://docs.github.com/en/authentication/connecting-to-github-with-ssh)、[Git commit 文档](https://git-scm.com/docs/git-commit)、[Git push 与 force-with-lease](https://git-scm.com/docs/git-push)、[Git rebase 文档](https://git-scm.com/docs/git-rebase)。
+### 10.3 整理多条提交的时间
+
+在隔离副本中备份原分支，确认标签、签名、合并提交和协作者的同步方案后，可用 `git rebase -i --root`，把需要处理的提交标为 `edit`。每次暂停时按上例调整日期，再运行 `git rebase --continue`。
+
+改动旧提交会连带改变后续提交 ID。包含 merge 的历史需要另行确认如何保留合并关系；整理结束后应核对完整提交图、文件树和项目验证结果。
+
+## 11 撤销修改与恢复版本
+
+### 11.1 按修改所在位置选择命令
+
+| 需要处理的内容 | 命令 | 结果 |
+| --- | --- | --- |
+| 取消暂存 | `git restore --staged -- file` | 保留工作区编辑 |
+| 放弃未暂存修改 | `git restore -- file` | 从暂存区恢复该文件，覆盖相应工作区编辑 |
+| 撤销已发布提交 | `git revert COMMIT` | 新建一条反向提交 |
+
+例如取消 README 的暂存：
+
+```bash
+git restore --staged -- README.md
+git status -sb
+git diff -- README.md
+```
+
+检查结果：文件修改仍存在，但不再位于暂存区。`restore` 直接覆盖工作区文件前，先确认要放弃哪些编辑。
+
+### 11.2 撤销已经发布的提交
+
+```bash
+git log --oneline -5
+git revert COMMIT_ID
+git show --stat HEAD
+```
+
+将 `COMMIT_ID` 替换为需要撤销的普通提交。检查新增反向提交，运行验证后正常推送。撤销 merge commit 时还需明确主线父提交，不能直接照用普通提交的命令。
+
+`reset --hard` 会重置索引并覆盖工作区的相应内容；公共分支修正优先使用可审查的反向提交。
+
+## 12 常见问题与故障案例
+
+### 12.1 找回误删的本地提交
+
+```bash
+git reflog
+git branch rescue/recovered COMMIT_ID
+git show --stat rescue/recovered
+```
+
+从 reflog 找到目标提交后，先建立救援分支并检查内容。reflog 是本地记录，存在保留期限；需要的提交确认后及时保存到正式分支。
+
+### 12.2 处理已经提交的密钥
+
+先在对应服务端吊销或轮换密钥，再将 `.env` 加入 `.gitignore`，并停止跟踪该文件：
+
+```bash
+git rm --cached -- .env
+git add .gitignore
+git commit -m "chore: stop tracking local environment"
+```
+
+`--cached` 保留本地文件。新的删除提交不会清除旧历史、fork 或缓存中的密钥，历史清理需要与仓库维护者和协作者协调。
+
+## 13 参考资料
+
+- [GitHub SSH 配置与测试](https://docs.github.com/en/authentication/connecting-to-github-with-ssh)
+- [Git commit 与 amend](https://git-scm.com/docs/git-commit)
+- [Git merge](https://git-scm.com/docs/git-merge) 与 [Git rebase](https://git-scm.com/docs/git-rebase)
+- [Git push 与 force-with-lease](https://git-scm.com/docs/git-push)
+- [Git restore](https://git-scm.com/docs/git-restore) 与 [Git reflog](https://git-scm.com/docs/git-reflog)
+
+[返回知识库总览](/knowledge-base/)
